@@ -120,6 +120,59 @@ class Database:
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_svc_site ON service_orders(site_id)')
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_req_status ON requests(status)')
 
+            # --- зоны участка ---
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS site_zones (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    site_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    area_sotki REAL NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(site_id, name),
+                    FOREIGN KEY(site_id) REFERENCES sites(id)
+                )
+            """)
+            # --- служебные ключи (дата последнего дайджеста и т.п.) ---
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+        self._migrate()
+
+    def _column_names(self, table: str) -> set:
+        return {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+
+    def _migrate(self):
+        """Только ALTER TABLE ADD COLUMN — существующие данные не трогаем.
+        Старые заказы автоматически получают work_type='mow' и dad_share=1."""
+        wanted = {
+            'service_orders': [
+                ("work_type",    "TEXT NOT NULL DEFAULT 'mow'"),
+                ("work_name",    "TEXT"),
+                ("amount",       "REAL"),
+                ("helper_name",  "TEXT"),
+                ("helper_pay",   "REAL NOT NULL DEFAULT 0"),
+                ("dad_share",    "INTEGER NOT NULL DEFAULT 1"),
+                ("zones",        "TEXT"),
+                ("duration_min", "INTEGER"),
+            ],
+            'sites': [
+                ("remind_days",         "INTEGER NOT NULL DEFAULT 30"),
+                ("remind_snooze_until", "TEXT"),
+            ],
+        }
+        with self.conn:
+            for table, cols in wanted.items():
+                have = self._column_names(table)
+                for name, decl in cols:
+                    if name not in have:
+                        self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+    # выручка заказа: покос = сотки×тариф, другая работа = фиксированная сумма
+    REVENUE_SQL = "CASE WHEN work_type='other' THEN COALESCE(amount,0) ELSE COALESCE(area_sotki,0)*COALESCE(tariff,0) END"
+
     # ---------------- legacy methods (unchanged) ----------------
     def add_user(self, user_id: int):
         with self.conn:
@@ -299,9 +352,9 @@ class Database:
         return dict(row) if row else None
 
     # Sites
-    def create_site(self, client_tg_id:Optional[int], address:str, area_sotki:Optional[float], contacts:Optional[str], created_by:str='CLIENT') -> int:
-        name=None; phone=None
-        if contacts:
+    def create_site(self, client_tg_id:Optional[int], address:str, area_sotki:Optional[float], contacts:Optional[str],
+                    created_by:str='CLIENT', name:Optional[str]=None, phone:Optional[str]=None) -> int:
+        if contacts and not (name or phone):
             # naive split: try phone digits
             import re
             digits = re.findall(r'\+?\d[\d\s\-()]{7,}', contacts)
@@ -336,10 +389,7 @@ class Database:
         return [dict(r) for r in rows]
 
     def get_site(self, site_id:int) -> Optional[Dict]:
-        row = self.conn.execute("""
-            SELECT id,client_tg_id,address,area_sotki,contact_name,contact_phone,last_service_at,service_count
-            FROM sites WHERE id=?
-        """, (site_id,)).fetchone()
+        row = self.conn.execute("SELECT * FROM sites WHERE id=?", (site_id,)).fetchone()
         return dict(row) if row else None
 
     def update_site(self, site_id:int, fields:Dict) -> bool:
@@ -356,36 +406,41 @@ class Database:
             return cur.rowcount>0
 
     # Service orders
-    def create_service_order(self, site_id:int, service_at:str, area_sotki:Optional[float], tariff:Optional[int], duration:Optional[str], notes:Optional[str], admin_tg_id:int, photo_file_ids:List[str]) -> int:
+    def create_service_order(self, site_id:int, service_at:str, area_sotki:Optional[float], tariff:Optional[int],
+                             duration:Optional[str], notes:Optional[str], admin_tg_id:int, photo_file_ids:List[str],
+                             work_type:str='mow', work_name:Optional[str]=None, amount:Optional[float]=None,
+                             helper_name:Optional[str]=None, helper_pay:float=0, dad_share:int=1,
+                             zones:Optional[str]=None, duration_min:Optional[int]=None) -> int:
         with self.conn:
             cur=self.conn.execute("""
-                INSERT INTO service_orders(site_id,service_at,area_sotki,tariff,duration,notes,created_by_admin_tg_id)
-                VALUES(?,?,?,?,?,?,?)
-            """, (site_id, service_at, area_sotki, tariff, duration, notes, admin_tg_id))
+                INSERT INTO service_orders(site_id,service_at,area_sotki,tariff,duration,notes,created_by_admin_tg_id,
+                                           work_type,work_name,amount,helper_name,helper_pay,dad_share,zones,duration_min)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (site_id, service_at, area_sotki, tariff, duration, notes, admin_tg_id,
+                  work_type, work_name, amount, helper_name, helper_pay, dad_share, zones, duration_min))
             oid=cur.lastrowid
             for fid in photo_file_ids or []:
                 self.conn.execute("INSERT INTO service_photos(order_id,file_id) VALUES(?,?)", (oid, fid))
-            # update counters
-            self.conn.execute("""
-                UPDATE sites
-                SET service_count = COALESCE(service_count,0) + 1,
-                    last_service_at = ?
-                WHERE id=?
-            """, (service_at, site_id))
+            # счётчик покосов и дата последнего покоса — только для покосов,
+            # «другая работа» на них не влияет (в т.ч. на напоминания)
+            if work_type != 'other':
+                self.conn.execute("""
+                    UPDATE sites
+                    SET service_count = COALESCE(service_count,0) + 1,
+                        last_service_at = MAX(COALESCE(last_service_at,''), ?),
+                        remind_snooze_until = NULL
+                    WHERE id=?
+                """, (service_at, site_id))
             return oid
 
     def list_service_orders_for_site(self, site_id:int, limit:int=100) -> List[Dict]:
         rows=self.conn.execute("""
-            SELECT id,site_id,service_at,area_sotki,tariff,duration,notes,created_at
-            FROM service_orders WHERE site_id=? ORDER BY service_at DESC, created_at DESC LIMIT ?
+            SELECT * FROM service_orders WHERE site_id=? ORDER BY service_at DESC, created_at DESC LIMIT ?
         """, (site_id, limit)).fetchall()
         return [dict(r) for r in rows]
 
     def get_service_order(self, order_id:int) -> Optional[Dict]:
-        row=self.conn.execute("""
-            SELECT id,site_id,service_at,area_sotki,tariff,duration,notes,created_at
-            FROM service_orders WHERE id=?
-        """, (order_id,)).fetchone()
+        row=self.conn.execute("SELECT * FROM service_orders WHERE id=?", (order_id,)).fetchone()
         return dict(row) if row else None
 
     def get_service_order_photos(self, order_id:int) -> List[str]:
@@ -393,7 +448,8 @@ class Database:
         return [r['file_id'] for r in rows]
 
     def update_service_order(self, order_id:int, fields:Dict) -> bool:
-        allowed={'service_at','area_sotki','tariff','duration','notes'}
+        allowed={'service_at','area_sotki','tariff','duration','notes',
+                 'work_name','amount','helper_name','helper_pay','dad_share','zones','duration_min'}
         sets=[]; params=[]
         for k,v in fields.items():
             if k in allowed:
@@ -486,11 +542,11 @@ class Database:
         return [dict(r) for r in rows]
 
     def stats_all_service_orders(self) -> Dict[str, float]:
-        row=self.conn.execute("""
+        row=self.conn.execute(f"""
             SELECT COUNT(*) AS total_orders,
                    SUM(area_sotki) AS total_area,
-                   SUM(COALESCE(area_sotki,0)*COALESCE(tariff,0)) AS total_income,
-                   AVG(COALESCE(area_sotki,0)*COALESCE(tariff,0)) AS avg_order_price
+                   SUM({self.REVENUE_SQL}) AS total_income,
+                   AVG({self.REVENUE_SQL}) AS avg_order_price
             FROM service_orders
         """).fetchone()
         return {
@@ -499,3 +555,111 @@ class Database:
             'total_income': row['total_income'] or 0,
             'avg_order_price': row['avg_order_price'] or 0,
         }
+
+    # ---------------- NEW: зоны участка ----------------
+    def list_zones(self, site_id:int) -> List[Dict]:
+        rows=self.conn.execute(
+            "SELECT id,site_id,name,area_sotki FROM site_zones WHERE site_id=? ORDER BY id", (site_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_zone(self, zone_id:int) -> Optional[Dict]:
+        row=self.conn.execute("SELECT id,site_id,name,area_sotki FROM site_zones WHERE id=?", (zone_id,)).fetchone()
+        return dict(row) if row else None
+
+    def add_zone(self, site_id:int, name:str, area_sotki:float) -> int:
+        with self.conn:
+            cur=self.conn.execute(
+                "INSERT OR IGNORE INTO site_zones(site_id,name,area_sotki) VALUES(?,?,?)",
+                (site_id, name.strip(), area_sotki))
+            if cur.rowcount:
+                return cur.lastrowid
+            row=self.conn.execute(
+                "SELECT id FROM site_zones WHERE site_id=? AND name=?", (site_id, name.strip())).fetchone()
+            return row['id'] if row else 0
+
+    def delete_zone(self, zone_id:int) -> bool:
+        with self.conn:
+            cur=self.conn.execute("DELETE FROM site_zones WHERE id=?", (zone_id,))
+            return cur.rowcount>0
+
+    # ---------------- NEW: помощники и тарифы (подсказки кнопками) ----------------
+    def recent_helper_names(self, limit:int=6) -> List[str]:
+        rows=self.conn.execute("""
+            SELECT helper_name FROM service_orders
+            WHERE helper_name IS NOT NULL AND helper_name != ''
+            GROUP BY helper_name ORDER BY MAX(id) DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [r['helper_name'] for r in rows]
+
+    def recent_tariffs(self, limit:int=5) -> List[int]:
+        rows=self.conn.execute("""
+            SELECT tariff FROM service_orders
+            WHERE tariff IS NOT NULL AND tariff > 0
+            GROUP BY tariff ORDER BY MAX(id) DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [int(r['tariff']) for r in rows]
+
+    # ---------------- NEW: статистика с деньгами ----------------
+    def list_orders_for_period(self, period:str='all') -> List[Dict]:
+        cond = {
+            'week':  "service_at >= date('now','-7 days')",
+            'month': "service_at >= date('now','-1 month')",
+            'year':  "service_at >= date('now','-1 year')",
+            'all':   "1=1",
+        }.get(period, "1=1")
+        rows=self.conn.execute(f"""
+            SELECT * FROM service_orders WHERE {cond} ORDER BY service_at ASC, created_at ASC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---------------- NEW: напоминания ----------------
+    def reminders_due(self, limit:int=50) -> List[Dict]:
+        """Участки, где с последнего ПОКОСА прошло больше remind_days и напоминание не отложено."""
+        rows=self.conn.execute("""
+            SELECT s.id, s.address, s.contact_name, s.contact_phone, s.remind_days,
+                   lm.last_mow,
+                   CAST(julianday('now') - julianday(lm.last_mow) AS INTEGER) AS days_ago
+            FROM sites s
+            JOIN (SELECT site_id, MAX(service_at) AS last_mow
+                  FROM service_orders WHERE work_type != 'other' GROUP BY site_id) lm
+              ON lm.site_id = s.id
+            WHERE julianday('now') - julianday(lm.last_mow) >= COALESCE(s.remind_days, 30)
+              AND (s.remind_snooze_until IS NULL OR s.remind_snooze_until <= date('now'))
+            ORDER BY days_ago DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_reminders_due(self) -> int:
+        return len(self.reminders_due(limit=500))
+
+    def snooze_site(self, site_id:int, days:int) -> bool:
+        with self.conn:
+            cur=self.conn.execute(
+                "UPDATE sites SET remind_snooze_until = date('now', ?) WHERE id=?",
+                (f'+{int(days)} days', site_id))
+            return cur.rowcount>0
+
+    def set_remind_days(self, site_id:int, days:int) -> bool:
+        with self.conn:
+            cur=self.conn.execute("UPDATE sites SET remind_days=? WHERE id=?", (int(days), site_id))
+            return cur.rowcount>0
+
+    # ---------------- NEW: meta и бэкап ----------------
+    def meta_get(self, key:str) -> Optional[str]:
+        row=self.conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row['value'] if row else None
+
+    def meta_set(self, key:str, value:str):
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value))
+
+    def backup_to(self, path:str):
+        """Консистентная копия базы через sqlite backup API (безопасно на живой базе)."""
+        dst = sqlite3.connect(path)
+        try:
+            with dst:
+                self.conn.backup(dst)
+        finally:
+            dst.close()

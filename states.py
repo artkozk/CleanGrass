@@ -43,11 +43,24 @@ class AdminOrderStates(StatesGroup):
     site_search = State()
     new_site_address = State()
     new_site_area = State()
-    new_site_contacts = State()
-    area = State()
+    new_site_contacts = State()  # legacy, не используется в новом флоу
+    new_site_name = State()
+    new_site_phone = State()
+    work_type = State()      # 🌱 покос / 🔨 другая работа (callback)
+    work_name = State()      # название другой работы
+    amount = State()         # фиксированная сумма другой работы
+    zones = State()          # выбор зон галочками (callback)
+    zone_new_name = State()  # добавление новой зоны на ходу
+    zone_new_area = State()
+    manual_area = State()    # ввод площади вручную без зон
+    area = State()           # legacy, не используется в новом флоу
     tariff = State()
     date = State()
     duration = State()
+    helper = State()         # был ли помощник (callback)
+    helper_name = State()
+    helper_pay = State()
+    dad = State()            # папина доля для другой работы (callback)
     notes = State()
     photos = State()
     confirm = State()
@@ -67,3 +80,6 @@ class AdminEditSiteStates(StatesGroup):
 
 class AdminEditServiceOrderStates(StatesGroup):
     field = State()
+
+class AdminRemindStates(StatesGroup):
+    snooze_days = State()  # «отложить на N дней»

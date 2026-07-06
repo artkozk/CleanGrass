@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Token: set env BOT_TOKEN, do NOT hardcode in repo
-BOT_TOKEN = "7424454761:AAHcVhjCSDG6jt4xscTeEyVot5pVcf61izQ"
+BOT_TOKEN = os.getenv('BOT_TOKEN', '')
 
 # Optional: seed admins via env (comma-separated telegram ids)
 ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x.strip().isdigit()]
@@ -13,6 +13,10 @@ ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x.strip().
 ADMIN_PASSWORD = os.getenv('BOT_ADMIN_PASSWORD', '123')
 
 DB_NAME = os.getenv('DB_NAME', 'grass_orders.db')
+
+# Часовой пояс и час утреннего дайджеста (напоминания + бэкап базы)
+BOT_TZ = os.getenv('BOT_TZ', 'Europe/Moscow')
+DIGEST_HOUR = int(os.getenv('DIGEST_HOUR', '8'))
 
 # i18n texts (existing)
 LANG = {

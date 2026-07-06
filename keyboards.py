@@ -119,8 +119,6 @@ def client_start_kb(sites: List[Dict], t, lang) -> InlineKeyboardMarkup:
         for s in sites[:30]:
             kb.add(InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"csitepick:{s['id']}"))
     kb.add(InlineKeyboardButton(t(lang,'client_new_request'), callback_data="cnewreq"))
-    if not sites:
-        kb.add(InlineKeyboardButton(t(lang,'admin_need_reg'), callback_data="noop"))
     return kb
 
 def client_site_nav_kb(site_id:int, idx:int, total:int, has_photos:bool, t, lang) -> InlineKeyboardMarkup:
@@ -143,11 +141,13 @@ def client_contacts_reply_kb(t, lang) -> ReplyKeyboardMarkup:
     kb.add(KeyboardButton(t(lang,'cancel')))
     return kb
 
-def admin_menu_kb(new_count:int, t, lang) -> InlineKeyboardMarkup:
+def admin_menu_kb(new_count:int, t, lang, remind_count:int=0) -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton(t(lang,'admin_create_order'), callback_data="aneworder"),
         InlineKeyboardButton(t(lang,'admin_archive'), callback_data="aarchive"),
+        InlineKeyboardButton("📊 Статистика", callback_data="astats_menu"),
+        InlineKeyboardButton(f"⏰ Напоминания ({remind_count})", callback_data="aremind"),
         InlineKeyboardButton(f"{t(lang,'admin_notifications')} ({new_count})", callback_data="anotifs"),
         InlineKeyboardButton(t(lang,'settings'), callback_data="settings"),
     )
@@ -218,7 +218,9 @@ def admin_edit_site_kb(site_id:int, t, lang) -> InlineKeyboardMarkup:
     kb.add(
         InlineKeyboardButton("📍 Адрес", callback_data=f"asite_edit_field:address:{site_id}"),
         InlineKeyboardButton("📏 Сотки", callback_data=f"asite_edit_field:area:{site_id}"),
-        InlineKeyboardButton("☎️ Контакты", callback_data=f"asite_edit_field:contacts:{site_id}"),
+        InlineKeyboardButton("👤 Имя клиента", callback_data=f"asite_edit_field:name:{site_id}"),
+        InlineKeyboardButton("☎️ Телефон", callback_data=f"asite_edit_field:contacts:{site_id}"),
+        InlineKeyboardButton("⏰ Интервал напоминаний", callback_data=f"asite_edit_field:remind:{site_id}"),
     )
     kb.add(InlineKeyboardButton(t(lang,'back'), callback_data=f"asite:{site_id}"))
     return kb
@@ -226,11 +228,13 @@ def admin_edit_site_kb(site_id:int, t, lang) -> InlineKeyboardMarkup:
 def admin_edit_order_kb(order_id:int, t, lang) -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup(row_width=2)
     kb.add(
-        InlineKeyboardButton("📏", callback_data=f"aorder_edit_field:area:{order_id}"),
-        InlineKeyboardButton("💵", callback_data=f"aorder_edit_field:tariff:{order_id}"),
-        InlineKeyboardButton("📅", callback_data=f"aorder_edit_field:date:{order_id}"),
-        InlineKeyboardButton("⏳", callback_data=f"aorder_edit_field:duration:{order_id}"),
-        InlineKeyboardButton("📝", callback_data=f"aorder_edit_field:notes:{order_id}"),
+        InlineKeyboardButton("📏 Сотки", callback_data=f"aorder_edit_field:area:{order_id}"),
+        InlineKeyboardButton("💵 Тариф", callback_data=f"aorder_edit_field:tariff:{order_id}"),
+        InlineKeyboardButton("💰 Сумма", callback_data=f"aorder_edit_field:amount:{order_id}"),
+        InlineKeyboardButton("🤝 Помощнику", callback_data=f"aorder_edit_field:helper:{order_id}"),
+        InlineKeyboardButton("📅 Дата", callback_data=f"aorder_edit_field:date:{order_id}"),
+        InlineKeyboardButton("⏳ Время", callback_data=f"aorder_edit_field:duration:{order_id}"),
+        InlineKeyboardButton("📝 Заметки", callback_data=f"aorder_edit_field:notes:{order_id}"),
     )
     kb.add(InlineKeyboardButton(t(lang,'back'), callback_data=f"aorder:{order_id}"))
     return kb
@@ -239,4 +243,101 @@ def admin_inline_done_kb(done_cb:str, t, lang) -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton(t(lang,'admin_photos_done'), callback_data=done_cb))
     kb.add(InlineKeyboardButton(t(lang,'cancel'), callback_data="amenu"))
+    return kb
+
+# ---- NEW: тип работы, зоны, помощник, папина доля, дата/тариф кнопками ----
+
+def work_type_kb() -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("🌱 Покос", callback_data="awt:mow"),
+        InlineKeyboardButton("🔨 Другая работа", callback_data="awt:other"),
+    )
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def zones_kb(zones, selected_ids, site_area, sel_sum) -> InlineKeyboardMarkup:
+    """Выбор зон галочками. zones — список dict(id,name,area_sotki)."""
+    kb=InlineKeyboardMarkup(row_width=1)
+    for z in zones[:30]:
+        mark = "✅" if z['id'] in selected_ids else "⬜"
+        area = f"{z['area_sotki']:g}"
+        kb.add(InlineKeyboardButton(f"{mark} {z['name']} ({area} сот)", callback_data=f"azt:{z['id']}"))
+    whole = f" ({site_area:g} сот)" if site_area else ""
+    kb.add(InlineKeyboardButton(f"🌍 Всё целиком{whole}", callback_data="azall"))
+    kb.add(InlineKeyboardButton("➕ Новая зона", callback_data="aznew"))
+    kb.add(InlineKeyboardButton("✍️ Ввести площадь вручную", callback_data="azman"))
+    if selected_ids:
+        kb.add(InlineKeyboardButton(f"▶️ Далее ({sel_sum:g} сот)", callback_data="azok"))
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def tariff_quick_kb(tariffs) -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=3)
+    if tariffs:
+        kb.add(*[InlineKeyboardButton(f"{v} руб", callback_data=f"atrf:{v}") for v in tariffs[:6]])
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def date_quick_kb() -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("📅 Сегодня", callback_data="adate:today"),
+        InlineKeyboardButton("📅 Вчера", callback_data="adate:yesterday"),
+    )
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def helper_yn_kb() -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("🤝 Был", callback_data="ahelp:yes"),
+        InlineKeyboardButton("🙅 Не было", callback_data="ahelp:no"),
+    )
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def helper_names_kb(names) -> InlineKeyboardMarkup:
+    """Имена — по индексу, чтобы не упираться в лимит callback_data."""
+    kb=InlineKeyboardMarkup(row_width=2)
+    if names:
+        kb.add(*[InlineKeyboardButton(n, callback_data=f"ahname:{i}") for i, n in enumerate(names[:8])])
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def dad_share_kb() -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("👨 Папина доля: да", callback_data="adad:yes"),
+        InlineKeyboardButton("Без папы", callback_data="adad:no"),
+    )
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+def skip_kb(cb:str="askip") -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup()
+    kb.add(InlineKeyboardButton("⏭ Пропустить", callback_data=cb))
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    return kb
+
+# ---- NEW: статистика и напоминания ----
+
+def stats_period_kb() -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("📅 Неделя", callback_data="astats:week"),
+        InlineKeyboardButton("📅 Месяц", callback_data="astats:month"),
+        InlineKeyboardButton("📅 Год", callback_data="astats:year"),
+        InlineKeyboardButton("📅 Всё время", callback_data="astats:all"),
+    )
+    kb.add(InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
+    return kb
+
+def remind_actions_kb(site_id:int) -> InlineKeyboardMarkup:
+    kb=InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        InlineKeyboardButton("📞 Позвонил — покос назначен", callback_data=f"armd_call:{site_id}"),
+        InlineKeyboardButton("🗓 Отложить на месяц", callback_data=f"armd_month:{site_id}"),
+        InlineKeyboardButton("⏲ Отложить на N дней", callback_data=f"armd_days:{site_id}"),
+    )
     return kb
