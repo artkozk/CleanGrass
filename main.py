@@ -28,7 +28,7 @@ from keyboards import (
     admin_menu_kb, admin_more_kb, admin_requests_list_kb, admin_request_actions_kb, admin_archive_kb,
     admin_site_actions_kb, admin_sites_kb, admin_orders_list_kb, admin_order_actions_kb,
     admin_edit_site_kb, admin_edit_order_kb, admin_inline_done_kb,
-    work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb, duration_quick_kb,
+    work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb, duration_quick_kb, paid_quick_kb,
     helper_yn_kb, helper_names_kb, dad_share_kb, skip_kb, step_nav_kb, prompt_cancel_kb,
     stats_period_kb, remind_actions_kb,
     site_pick_kb, sites_browse_kb, search_results_kb, zones_manage_kb, confirm_action_kb
@@ -165,16 +165,32 @@ def show_admin_menu(chat_id:int, uid:int):
                      reply_markup=admin_menu_kb(db.count_new_requests(), T, lang,
                                                 remind_count=db.count_reminders_due()))
 
-def order_revenue(o: Dict) -> float:
+def order_calc_revenue(o: Dict) -> float:
+    """Расчётная выручка: сотки×тариф для покоса, фикс. сумма для другой работы."""
     if (o.get('work_type') or 'mow') == 'other':
         return float(o.get('amount') or 0)
     return float(o.get('area_sotki') or 0) * float(o.get('tariff') or 0)
+
+def order_revenue(o: Dict) -> float:
+    """Фактическая выручка: сколько заплатили; без этого — по расчёту."""
+    paid = o.get('paid_amount')
+    if paid is not None:
+        return float(paid)
+    return order_calc_revenue(o)
 
 def order_money_lines(o: Dict) -> List[str]:
     """Раскладка денег заказа: выручка → помощнику → заработок → проценты (папе) → чистыми, руб/час."""
     m = calc_money(o.get('work_type') or 'mow', order_revenue(o),
                    o.get('helper_pay') or 0, 1 if (o.get('dad_share') is None) else int(o.get('dad_share')))
-    lines = [f"💰 Выручка: <b>{fmt_price(m['revenue'])}</b> руб"]
+    calc = order_calc_revenue(o)
+    paid = o.get('paid_amount')
+    if paid is not None and round(float(paid), 2) != round(calc, 2):
+        diff = float(paid) - calc
+        sign = '+' if diff > 0 else '−'
+        lines = [f"🧮 По расчёту: {fmt_price(calc)} руб",
+                 f"💰 Заплатили: <b>{fmt_price(paid)}</b> руб ({sign}{fmt_price(abs(diff))})"]
+    else:
+        lines = [f"💰 Выручка: <b>{fmt_price(m['revenue'])}</b> руб"]
     if m['helper_pay']:
         who = f" ({o.get('helper_name')})" if o.get('helper_name') else ""
         lines.append(f"🤝 Помощнику{who}: −{fmt_price(m['helper_pay'])} руб")
@@ -877,7 +893,7 @@ def a_tariff_cb(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
     temp.setdefault(uid,{})['tariff']=int(call.data.split(':')[1])
-    _ask_date(uid, call.message.chat.id)
+    _ask_paid(uid, call.message.chat.id)
     safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.tariff)
@@ -890,7 +906,40 @@ def a_order_tariff(message: types.Message):
     except Exception:
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['tariff']=tariff
-    _ask_date(uid, message.chat.id)
+    _ask_paid(uid, message.chat.id)
+
+def _ask_paid(uid:int, chat_id:int):
+    """Сколько заплатили по факту: клиент часто округляет расчётную сумму."""
+    ctx=temp.setdefault(uid,{})
+    calc=float(ctx.get('area') or 0)*float(ctx.get('tariff') or 0)
+    bot.set_state(uid, AdminOrderStates.paid, chat_id)
+    bot.send_message(chat_id,
+                     f"🧮 По расчёту: <b>{fmt_price(calc)}</b> руб.\n💰 Сколько заплатили в итоге? Кнопкой или напиши сумму:",
+                     reply_markup=paid_quick_kb(calc))
+
+def _set_paid(uid:int, chat_id:int, paid:float):
+    ctx=temp.setdefault(uid,{})
+    calc=round(float(ctx.get('area') or 0)*float(ctx.get('tariff') or 0), 2)
+    # ровно по расчёту — не храним, чтобы правки соток/тарифа не расходились с оплатой
+    ctx['paid']=None if round(paid,2)==calc else paid
+    _ask_date(uid, chat_id)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('apaid:'), state=AdminOrderStates.paid)
+def a_paid_cb(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    _set_paid(call.from_user.id, call.message.chat.id, float(call.data.split(':')[1]))
+    safe_answer(call)
+
+@bot.message_handler(state=AdminOrderStates.paid)
+def a_paid_text(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id; lang=get_lang(uid)
+    try:
+        paid=float((message.text or '').strip().replace(',','.').replace(' ',''))
+        if paid<0: raise ValueError
+    except Exception:
+        bot.send_message(message.chat.id, T(lang,'err_value')); return
+    _set_paid(uid, message.chat.id, paid)
 
 def _ask_date(uid:int, chat_id:int):
     bot.set_state(uid, AdminOrderStates.date, chat_id)
@@ -1089,6 +1138,7 @@ def _draft_as_order(data: Dict) -> Dict:
         'dad_share': data.get('dad_share', 1),
         'duration_min': data.get('duration_min'),
         'zones': data.get('zones_label'),
+        'paid_amount': data.get('paid'),
     }
 
 @bot.callback_query_handler(func=lambda c: c.data=='aphoto_done', state=AdminOrderStates.photos)
@@ -1151,6 +1201,7 @@ def aconfirm_order(call: types.CallbackQuery):
         dad_share=int(data.get('dad_share', 1)),
         zones=data.get('zones_label'),
         duration_min=data.get('duration_min'),
+        paid_amount=data.get('paid'),
     )
     # link to request if present
     req_id=data.get('req_id')
@@ -1199,7 +1250,8 @@ def order_step_back(call: types.CallbackQuery):
         S.zone_new_area.name: _show_zones_screen,
         S.manual_area.name: _show_zones_screen,
         S.tariff.name: _show_zones_screen,
-        S.date.name: _ask_amount if is_other else _ask_tariff,
+        S.paid.name: _ask_tariff,
+        S.date.name: _ask_amount if is_other else _ask_paid,
         S.duration.name: _ask_date,
         S.helper.name: _ask_duration,
         S.helper_name.name: _ask_helper,
@@ -1662,6 +1714,7 @@ def aorder_edit_field(call: types.CallbackQuery):
     prompts={'area':"📏 Новая площадь (сотки):",
              'tariff':"💵 Новый тариф (руб/сот):",
              'amount':"💰 Новая сумма за работу (руб, для «другой работы»):",
+             'paid':"💸 Сколько заплатили по факту (руб)? 0 — вернуть «ровно по расчёту»:",
              'helper':"🤝 Сколько отдал помощнику (руб, 0 — если не было):",
              'date':"📅 Новая дата:",
              'duration':"⏳ Новая длительность (2.5, 2:30, 9:30-12:00):",
@@ -1685,6 +1738,10 @@ def aorder_edit_apply(message: types.Message):
             fields['tariff']=int(txt)
         elif field=='amount':
             fields['amount']=float(txt.replace(',','.').replace(' ',''))
+        elif field=='paid':
+            v=float(txt.replace(',','.').replace(' ',''))
+            if v<0: raise ValueError
+            fields['paid_amount']=None if v==0 else v
         elif field=='helper':
             fields['helper_pay']=float(txt.replace(',','.').replace(' ',''))
         elif field=='date':

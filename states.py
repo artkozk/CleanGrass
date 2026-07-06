@@ -55,6 +55,7 @@ class AdminOrderStates(StatesGroup):
     manual_area = State()    # ввод площади вручную без зон
     area = State()           # legacy, не используется в новом флоу
     tariff = State()
+    paid = State()           # сколько заплатили по факту (кнопки округления)
     date = State()
     duration = State()
     helper = State()         # был ли помощник (callback)

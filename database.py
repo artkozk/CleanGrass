@@ -157,6 +157,7 @@ class Database:
                 ("dad_share",    "INTEGER NOT NULL DEFAULT 1"),
                 ("zones",        "TEXT"),
                 ("duration_min", "INTEGER"),
+                ("paid_amount",  "REAL"),  # сколько заплатили по факту (NULL = ровно по расчёту)
             ],
             'sites': [
                 ("remind_days",         "INTEGER NOT NULL DEFAULT 30"),
@@ -170,8 +171,8 @@ class Database:
                     if name not in have:
                         self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
-    # выручка заказа: покос = сотки×тариф, другая работа = фиксированная сумма
-    REVENUE_SQL = "CASE WHEN work_type='other' THEN COALESCE(amount,0) ELSE COALESCE(area_sotki,0)*COALESCE(tariff,0) END"
+    # выручка заказа: фактическая оплата, а без неё — покос = сотки×тариф, другая работа = фикс. сумма
+    REVENUE_SQL = "COALESCE(paid_amount, CASE WHEN work_type='other' THEN COALESCE(amount,0) ELSE COALESCE(area_sotki,0)*COALESCE(tariff,0) END)"
 
     # ---------------- legacy methods (unchanged) ----------------
     def add_user(self, user_id: int):
@@ -433,14 +434,15 @@ class Database:
                              duration:Optional[str], notes:Optional[str], admin_tg_id:int, photo_file_ids:List[str],
                              work_type:str='mow', work_name:Optional[str]=None, amount:Optional[float]=None,
                              helper_name:Optional[str]=None, helper_pay:float=0, dad_share:int=1,
-                             zones:Optional[str]=None, duration_min:Optional[int]=None) -> int:
+                             zones:Optional[str]=None, duration_min:Optional[int]=None,
+                             paid_amount:Optional[float]=None) -> int:
         with self.conn:
             cur=self.conn.execute("""
                 INSERT INTO service_orders(site_id,service_at,area_sotki,tariff,duration,notes,created_by_admin_tg_id,
-                                           work_type,work_name,amount,helper_name,helper_pay,dad_share,zones,duration_min)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                           work_type,work_name,amount,helper_name,helper_pay,dad_share,zones,duration_min,paid_amount)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (site_id, service_at, area_sotki, tariff, duration, notes, admin_tg_id,
-                  work_type, work_name, amount, helper_name, helper_pay, dad_share, zones, duration_min))
+                  work_type, work_name, amount, helper_name, helper_pay, dad_share, zones, duration_min, paid_amount))
             oid=cur.lastrowid
             for fid in photo_file_ids or []:
                 self.conn.execute("INSERT INTO service_photos(order_id,file_id) VALUES(?,?)", (oid, fid))
@@ -472,7 +474,7 @@ class Database:
 
     def update_service_order(self, order_id:int, fields:Dict) -> bool:
         allowed={'service_at','area_sotki','tariff','duration','notes',
-                 'work_name','amount','helper_name','helper_pay','dad_share','zones','duration_min'}
+                 'work_name','amount','helper_name','helper_pay','dad_share','zones','duration_min','paid_amount'}
         sets=[]; params=[]
         for k,v in fields.items():
             if k in allowed:

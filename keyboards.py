@@ -293,6 +293,7 @@ def admin_edit_order_kb(order_id:int, t, lang) -> InlineKeyboardMarkup:
         InlineKeyboardButton("📏 Сотки", callback_data=f"aorder_edit_field:area:{order_id}"),
         InlineKeyboardButton("💵 Тариф", callback_data=f"aorder_edit_field:tariff:{order_id}"),
         InlineKeyboardButton("💰 Сумма", callback_data=f"aorder_edit_field:amount:{order_id}"),
+        InlineKeyboardButton("💸 Заплатили", callback_data=f"aorder_edit_field:paid:{order_id}"),
         InlineKeyboardButton("🤝 Помощнику", callback_data=f"aorder_edit_field:helper:{order_id}"),
         InlineKeyboardButton("📅 Дата", callback_data=f"aorder_edit_field:date:{order_id}"),
         InlineKeyboardButton("⏳ Время", callback_data=f"aorder_edit_field:duration:{order_id}"),
@@ -359,6 +360,23 @@ def date_quick_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton("📅 Сегодня", callback_data="adate:today"),
         InlineKeyboardButton("📅 Вчера", callback_data="adate:yesterday"),
     )
+    _nav_row(kb)
+    return kb
+
+def paid_quick_kb(calc: float) -> InlineKeyboardMarkup:
+    """Фактическая оплата: ровно по расчёту или округления, свою сумму — текстом."""
+    kb=InlineKeyboardMarkup(row_width=1)
+    calc=round(float(calc), 2)
+    variants=[]
+    exact=int(calc) if calc==int(calc) else calc
+    variants.append((f"✅ Ровно {exact:g} руб", calc))
+    down=(int(calc)//100)*100
+    up=down+100 if calc>down else down
+    for v in (down, up):
+        if v>0 and round(float(v),2)!=calc and all(round(float(v),2)!=x[1] for x in variants):
+            variants.append((f"💰 {v} руб", float(v)))
+    for label, val in variants:
+        kb.add(InlineKeyboardButton(label, callback_data=f"apaid:{val:g}"))
     _nav_row(kb)
     return kb
 
