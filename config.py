@@ -116,7 +116,7 @@ LANG = {
     'client_order_again': "🟩 Заказать покос",
     'client_back_sites': "↩️ К списку участков",
 
-    'admin_need_reg': "",
+    'admin_need_reg': "🔒 Эта кнопка для администратора. Отправь /start, чтобы открыть своё меню.",
     'admin_enter_password': "Введи пароль администратора:",
     'admin_bad_password': "❌ Неверный пароль.",
     'admin_ok': "✅ Админ доступ включён.",

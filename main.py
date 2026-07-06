@@ -28,8 +28,8 @@ from keyboards import (
     admin_menu_kb, admin_requests_list_kb, admin_request_actions_kb, admin_archive_kb,
     admin_site_actions_kb, admin_sites_kb, admin_orders_list_kb, admin_order_actions_kb,
     admin_edit_site_kb, admin_edit_order_kb, admin_inline_done_kb,
-    work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb,
-    helper_yn_kb, helper_names_kb, dad_share_kb, skip_kb,
+    work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb, duration_quick_kb,
+    helper_yn_kb, helper_names_kb, dad_share_kb, skip_kb, step_nav_kb, prompt_cancel_kb,
     stats_period_kb, remind_actions_kb,
     site_pick_kb, sites_browse_kb, search_results_kb, zones_manage_kb, confirm_action_kb
 )
@@ -287,6 +287,14 @@ def c_enter_area(message: types.Message):
     bot.set_state(uid, ClientRequestStates.contacts, message.chat.id)
     bot.send_message(message.chat.id, T(lang,'client_enter_contacts'), reply_markup=client_contacts_reply_kb(T,lang))
 
+def _client_comment_kb(lang) -> types.InlineKeyboardMarkup:
+    kb=types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton("⏭ Пропустить", callback_data="cskip_comment"),
+        types.InlineKeyboardButton(T(lang,'cancel'), callback_data="cancel"),
+    )
+    return kb
+
 @bot.message_handler(content_types=['contact'], state=ClientRequestStates.contacts)
 def c_enter_contacts_contact(message: types.Message):
     uid=message.from_user.id; lang=get_lang(uid)
@@ -294,7 +302,7 @@ def c_enter_contacts_contact(message: types.Message):
     temp.setdefault(uid,{})['contacts']=phone
     db.upsert_client(uid, phone=phone)
     bot.set_state(uid, ClientRequestStates.comment, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'client_enter_comment'), reply_markup=cancel_kb(T,lang))
+    bot.send_message(message.chat.id, T(lang,'client_enter_comment'), reply_markup=_client_comment_kb(lang))
 
 @bot.message_handler(state=ClientRequestStates.contacts)
 def c_enter_contacts_text(message: types.Message):
@@ -304,16 +312,9 @@ def c_enter_contacts_text(message: types.Message):
         temp.pop(uid,None); bot.delete_state(uid, message.chat.id); show_client_start(message.chat.id, uid); return
     temp.setdefault(uid,{})['contacts']=txt
     bot.set_state(uid, ClientRequestStates.comment, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'client_enter_comment'), reply_markup=cancel_kb(T,lang))
+    bot.send_message(message.chat.id, T(lang,'client_enter_comment'), reply_markup=_client_comment_kb(lang))
 
-@bot.message_handler(state=ClientRequestStates.comment)
-def c_enter_comment(message: types.Message):
-    uid=message.from_user.id; lang=get_lang(uid)
-    txt=(message.text or '').strip()
-    if txt.lower()==T(lang,'cancel').lower():
-        temp.pop(uid,None); bot.delete_state(uid, message.chat.id); show_client_start(message.chat.id, uid); return
-    temp.setdefault(uid,{})['comment']=txt if txt not in (LANG['ru']['skip'], LANG['en']['skip']) else ''
-    # confirm
+def _client_request_confirm(uid:int, chat_id:int):
     data=temp.get(uid,{})
     summary = "\n".join([
         "🧾 <b>Заявка на покос</b>",
@@ -327,8 +328,24 @@ def c_enter_comment(message: types.Message):
         types.InlineKeyboardButton("✅ Отправить", callback_data="csendreq"),
         types.InlineKeyboardButton("❌ Отмена", callback_data="ccancelreq"),
     )
-    bot.send_message(message.chat.id, summary, reply_markup=kb)
-    bot.set_state(uid, ClientRequestStates.confirm, message.chat.id)
+    bot.send_message(chat_id, summary, reply_markup=kb)
+    bot.set_state(uid, ClientRequestStates.confirm, chat_id)
+
+@bot.callback_query_handler(func=lambda c: c.data=='cskip_comment', state=ClientRequestStates.comment)
+def cskip_comment(call: types.CallbackQuery):
+    uid=call.from_user.id
+    temp.setdefault(uid,{})['comment']=''
+    _client_request_confirm(uid, call.message.chat.id)
+    safe_answer(call)
+
+@bot.message_handler(state=ClientRequestStates.comment)
+def c_enter_comment(message: types.Message):
+    uid=message.from_user.id; lang=get_lang(uid)
+    txt=(message.text or '').strip()
+    if txt.lower()==T(lang,'cancel').lower():
+        temp.pop(uid,None); bot.delete_state(uid, message.chat.id); show_client_start(message.chat.id, uid); return
+    temp.setdefault(uid,{})['comment']=txt if txt not in (LANG['ru']['skip'], LANG['en']['skip']) else ''
+    _client_request_confirm(uid, message.chat.id)
 
 @bot.callback_query_handler(func=lambda c: c.data in ('csendreq','ccancelreq'), state=ClientRequestStates.confirm)
 def c_confirm_req(call: types.CallbackQuery):
@@ -494,7 +511,9 @@ def anotifs(call: types.CallbackQuery):
     uid=call.from_user.id; lang=get_lang(uid)
     reqs=db.list_requests('NEW', limit=50)
     if not reqs:
-        bot.send_message(call.message.chat.id, T(lang,'admin_notifs_empty'), reply_markup=admin_menu_kb(db.count_new_requests(), T, lang))
+        bot.send_message(call.message.chat.id, T(lang,'admin_notifs_empty'),
+                         reply_markup=admin_menu_kb(db.count_new_requests(), T, lang,
+                                                    remind_count=db.count_reminders_due()))
     else:
         bot.send_message(call.message.chat.id, "🔔 Новые заявки:", reply_markup=admin_requests_list_kb(reqs, T, lang))
     safe_answer(call)
@@ -589,7 +608,7 @@ def aneworder_newsite(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id; lang=get_lang(uid)
     bot.set_state(uid, AdminOrderStates.new_site_address, call.message.chat.id)
-    bot.send_message(call.message.chat.id, T(lang,'admin_new_site_address'))
+    bot.send_message(call.message.chat.id, T(lang,'admin_new_site_address'), reply_markup=step_nav_kb(back=False))
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('aneworder_site:'))
@@ -609,7 +628,7 @@ def a_new_site_address(message: types.Message):
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['new_site_address']=addr
     bot.set_state(uid, AdminOrderStates.new_site_area, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'admin_new_site_area'))
+    bot.send_message(message.chat.id, T(lang,'admin_new_site_area'), reply_markup=step_nav_kb(back=False))
 
 @bot.message_handler(state=AdminOrderStates.new_site_area)
 def a_new_site_area(message: types.Message):
@@ -645,7 +664,23 @@ def _finish_new_site(uid:int, chat_id:int, phone:Optional[str]):
     ctx=temp.get(uid,{})
     site_id=db.create_site(None, ctx.get('new_site_address'), ctx.get('new_site_area'), None,
                            created_by='ADMIN', name=ctx.get('new_site_name'), phone=phone)
+    if ctx.get('site_only'):
+        # создание из раздела «Участки» — показываем карточку, заказ не начинаем
+        temp.pop(uid,None); bot.delete_state(uid, chat_id)
+        bot.send_message(chat_id, "✅ Участок создан.")
+        asite_show(chat_id, uid, site_id)
+        return
     _start_admin_order(uid, chat_id, site_id)
+
+@bot.callback_query_handler(func=lambda c: c.data=='anewsite_only')
+def anewsite_only(call: types.CallbackQuery):
+    """Новый участок из раздела «Участки» — без создания заказа."""
+    if not require_admin_call(call): return
+    uid=call.from_user.id; lang=get_lang(uid)
+    temp[uid]={'flow':'new_site_only','site_only':True}
+    bot.set_state(uid, AdminOrderStates.new_site_address, call.message.chat.id)
+    bot.send_message(call.message.chat.id, T(lang,'admin_new_site_address'), reply_markup=prompt_cancel_kb("asites"))
+    safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data=='askip_sphone', state=AdminOrderStates.new_site_phone)
 def a_new_site_phone_skip(call: types.CallbackQuery):
@@ -665,8 +700,12 @@ def _start_admin_order(uid:int, chat_id:int, site_id:int, req_id:Optional[int]=N
     if not site:
         bot.send_message(chat_id, "❌ Участок не найден."); return
     temp[uid]={'flow':'admin_order','site_id':site_id,'req_id':req_id,'photos':[],'zone_sel':[]}
+    _ask_work_type(uid, chat_id)
+
+def _ask_work_type(uid:int, chat_id:int):
+    site=db.get_site(int(temp.setdefault(uid,{}).get('site_id',0))) or {}
     bot.set_state(uid, AdminOrderStates.work_type, chat_id)
-    bot.send_message(chat_id, f"📍 {site['address']}\nЧто делали?", reply_markup=work_type_kb())
+    bot.send_message(chat_id, f"📍 {site.get('address','—')}\nЧто делали?", reply_markup=work_type_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('awt:'), state=AdminOrderStates.work_type)
 def a_work_type(call: types.CallbackQuery):
@@ -676,11 +715,18 @@ def a_work_type(call: types.CallbackQuery):
     ctx=temp.setdefault(uid,{})
     ctx['work_type']=wt
     if wt=='other':
-        bot.set_state(uid, AdminOrderStates.work_name, call.message.chat.id)
-        bot.send_message(call.message.chat.id, "🔨 Название работы (например: копка земли):")
+        _ask_work_name(uid, call.message.chat.id)
     else:
         _show_zones_screen(uid, call.message.chat.id)
     safe_answer(call)
+
+def _ask_work_name(uid:int, chat_id:int):
+    bot.set_state(uid, AdminOrderStates.work_name, chat_id)
+    bot.send_message(chat_id, "🔨 Название работы (например: копка земли):", reply_markup=step_nav_kb())
+
+def _ask_amount(uid:int, chat_id:int):
+    bot.set_state(uid, AdminOrderStates.amount, chat_id)
+    bot.send_message(chat_id, "💰 Сумма за работу (руб):", reply_markup=step_nav_kb())
 
 @bot.message_handler(state=AdminOrderStates.work_name)
 def a_work_name(message: types.Message):
@@ -690,8 +736,7 @@ def a_work_name(message: types.Message):
     if len(name)<2:
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['work_name']=name
-    bot.set_state(uid, AdminOrderStates.amount, message.chat.id)
-    bot.send_message(message.chat.id, "💰 Сумма за работу (руб):")
+    _ask_amount(uid, message.chat.id)
 
 @bot.message_handler(state=AdminOrderStates.amount)
 def a_amount(message: types.Message):
@@ -748,7 +793,7 @@ def a_zone_all(call: types.CallbackQuery):
     area=site.get('area_sotki') or (sum(z['area_sotki'] for z in zones) if zones else None)
     if not area:
         bot.set_state(uid, AdminOrderStates.manual_area, call.message.chat.id)
-        bot.send_message(call.message.chat.id, "📏 Площадь участка неизвестна — введи сотки вручную:")
+        bot.send_message(call.message.chat.id, "📏 Площадь участка неизвестна — введи сотки вручную:", reply_markup=step_nav_kb())
         safe_answer(call); return
     ctx['area']=float(area); ctx['zones_label']='всё целиком'
     _ask_tariff(uid, call.message.chat.id)
@@ -759,7 +804,7 @@ def a_zone_new(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
     bot.set_state(uid, AdminOrderStates.zone_new_name, call.message.chat.id)
-    bot.send_message(call.message.chat.id, "🌿 Название зоны (например: перед домом):")
+    bot.send_message(call.message.chat.id, "🌿 Название зоны (например: перед домом):", reply_markup=step_nav_kb())
     safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.zone_new_name)
@@ -771,7 +816,7 @@ def a_zone_new_name(message: types.Message):
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['zone_new_name']=name
     bot.set_state(uid, AdminOrderStates.zone_new_area, message.chat.id)
-    bot.send_message(message.chat.id, "📏 Площадь зоны (сотки):")
+    bot.send_message(message.chat.id, "📏 Площадь зоны (сотки):", reply_markup=step_nav_kb())
 
 @bot.message_handler(state=AdminOrderStates.zone_new_area)
 def a_zone_new_area(message: types.Message):
@@ -793,7 +838,7 @@ def a_zone_manual(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
     bot.set_state(uid, AdminOrderStates.manual_area, call.message.chat.id)
-    bot.send_message(call.message.chat.id, "📏 Введи площадь (сотки, например 2.5):")
+    bot.send_message(call.message.chat.id, "📏 Введи площадь (сотки, например 2.5):", reply_markup=step_nav_kb())
     safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.manual_area)
@@ -874,7 +919,24 @@ def a_order_date(message: types.Message):
 
 def _ask_duration(uid:int, chat_id:int):
     bot.set_state(uid, AdminOrderStates.duration, chat_id)
-    bot.send_message(chat_id, "⏳ Сколько работали? Примеры: 2.5, 2ч 30, 2:30 или время работы 9:30-12:00")
+    bot.send_message(chat_id, "⏳ Сколько работали? Кнопкой — или напиши: 2.5, 2ч 30, 2:30, 9:30-12:00",
+                     reply_markup=duration_quick_kb())
+
+def _set_duration(uid:int, chat_id:int, mins:int):
+    ctx=temp.setdefault(uid,{})
+    ctx['duration_min']=mins
+    ctx['duration']=fmt_minutes(mins)
+    _ask_helper(uid, chat_id)
+
+def _ask_helper(uid:int, chat_id:int):
+    bot.set_state(uid, AdminOrderStates.helper, chat_id)
+    bot.send_message(chat_id, "🤝 Помощник был?", reply_markup=helper_yn_kb())
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('adur:'), state=AdminOrderStates.duration)
+def a_duration_cb(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    _set_duration(call.from_user.id, call.message.chat.id, int(call.data.split(':')[1]))
+    safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.duration)
 def a_order_duration(message: types.Message):
@@ -883,11 +945,7 @@ def a_order_duration(message: types.Message):
     mins=parse_duration_minutes((message.text or '').strip())
     if not mins:
         bot.send_message(message.chat.id, T(lang,'err_duration')); return
-    ctx=temp.setdefault(uid,{})
-    ctx['duration_min']=mins
-    ctx['duration']=fmt_minutes(mins)
-    bot.set_state(uid, AdminOrderStates.helper, message.chat.id)
-    bot.send_message(message.chat.id, "🤝 Помощник был?", reply_markup=helper_yn_kb())
+    _set_duration(uid, message.chat.id, mins)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('ahelp:'), state=AdminOrderStates.helper)
 def a_helper_yn(call: types.CallbackQuery):
@@ -898,12 +956,20 @@ def a_helper_yn(call: types.CallbackQuery):
         ctx['helper_name']=None; ctx['helper_pay']=0
         _after_helper(uid, call.message.chat.id)
     else:
-        names=db.recent_helper_names(limit=8)
-        temp.setdefault(uid,{})['helper_names']=names
-        bot.set_state(uid, AdminOrderStates.helper_name, call.message.chat.id)
-        bot.send_message(call.message.chat.id, "👤 Кто помогал? Кнопкой или напиши имя:",
-                         reply_markup=helper_names_kb(names))
+        _ask_helper_name(uid, call.message.chat.id)
     safe_answer(call)
+
+def _ask_helper_name(uid:int, chat_id:int):
+    names=db.recent_helper_names(limit=8)
+    temp.setdefault(uid,{})['helper_names']=names
+    bot.set_state(uid, AdminOrderStates.helper_name, chat_id)
+    bot.send_message(chat_id, "👤 Кто помогал? Кнопкой или напиши имя:",
+                     reply_markup=helper_names_kb(names))
+
+def _ask_helper_pay(uid:int, chat_id:int):
+    name=temp.setdefault(uid,{}).get('helper_name') or ''
+    bot.set_state(uid, AdminOrderStates.helper_pay, chat_id)
+    bot.send_message(chat_id, f"💸 Сколько отдал {name} (руб)?", reply_markup=step_nav_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('ahname:'), state=AdminOrderStates.helper_name)
 def a_helper_name_cb(call: types.CallbackQuery):
@@ -914,8 +980,7 @@ def a_helper_name_cb(call: types.CallbackQuery):
     if idx>=len(names):
         safe_answer(call); return
     temp[uid]['helper_name']=names[idx]
-    bot.set_state(uid, AdminOrderStates.helper_pay, call.message.chat.id)
-    bot.send_message(call.message.chat.id, f"💸 Сколько отдал {names[idx]} (руб)?")
+    _ask_helper_pay(uid, call.message.chat.id)
     safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.helper_name)
@@ -926,8 +991,7 @@ def a_helper_name(message: types.Message):
     if len(name)<2:
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['helper_name']=name
-    bot.set_state(uid, AdminOrderStates.helper_pay, message.chat.id)
-    bot.send_message(message.chat.id, f"💸 Сколько отдал {name} (руб)?")
+    _ask_helper_pay(uid, message.chat.id)
 
 @bot.message_handler(state=AdminOrderStates.helper_pay)
 def a_helper_pay(message: types.Message):
@@ -944,11 +1008,14 @@ def a_helper_pay(message: types.Message):
 def _after_helper(uid:int, chat_id:int):
     ctx=temp.setdefault(uid,{})
     if ctx.get('work_type')=='other':
-        bot.set_state(uid, AdminOrderStates.dad, chat_id)
-        bot.send_message(chat_id, "👨 Папина доля с этой работы?", reply_markup=dad_share_kb())
+        _ask_dad(uid, chat_id)
     else:
         ctx['dad_share']=1
         _ask_notes(uid, chat_id)
+
+def _ask_dad(uid:int, chat_id:int):
+    bot.set_state(uid, AdminOrderStates.dad, chat_id)
+    bot.send_message(chat_id, "👨 Папина доля с этой работы?", reply_markup=dad_share_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('adad:'), state=AdminOrderStates.dad)
 def a_dad(call: types.CallbackQuery):
@@ -960,37 +1027,54 @@ def a_dad(call: types.CallbackQuery):
 
 def _ask_notes(uid:int, chat_id:int):
     bot.set_state(uid, AdminOrderStates.notes, chat_id)
-    bot.send_message(chat_id, "📝 Заметки:", reply_markup=skip_kb("askip_notes"))
+    bot.send_message(chat_id, "📝 Заметки:", reply_markup=skip_kb("askip_notes", back=True))
+
+def _ask_photos(uid:int, chat_id:int):
+    lang=get_lang(uid)
+    temp.setdefault(uid,{}).setdefault('photos',[])
+    bot.set_state(uid, AdminOrderStates.photos, chat_id)
+    bot.send_message(chat_id, T(lang,'admin_order_photos'),
+                     reply_markup=admin_inline_done_kb("aphoto_done", T, lang))
 
 @bot.callback_query_handler(func=lambda c: c.data=='askip_notes', state=AdminOrderStates.notes)
 def a_notes_skip(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
+    uid=call.from_user.id
     ctx=temp.setdefault(uid,{})
     ctx['notes']=''; ctx['photos']=[]
-    bot.set_state(uid, AdminOrderStates.photos, call.message.chat.id)
-    bot.send_message(call.message.chat.id, T(lang,'admin_order_photos'),
-                     reply_markup=admin_inline_done_kb("aphoto_done", T, lang))
+    _ask_photos(uid, call.message.chat.id)
     safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.notes)
 def a_order_notes(message: types.Message):
     if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
+    uid=message.from_user.id
     txt=(message.text or '').strip()
     ctx=temp.setdefault(uid,{})
     ctx['notes']=txt if txt not in (LANG['ru']['skip'], LANG['en']['skip']) else ''
     ctx['photos']=[]
-    bot.set_state(uid, AdminOrderStates.photos, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'admin_order_photos'), reply_markup=admin_inline_done_kb("aphoto_done", T, lang))
+    _ask_photos(uid, message.chat.id)
 
 @bot.message_handler(content_types=['photo'], state=AdminOrderStates.photos)
 def a_order_photos(message: types.Message):
     if not require_admin_msg(message): return
-    uid=message.from_user.id
+    uid=message.from_user.id; lang=get_lang(uid)
     fid=message.photo[-1].file_id
     temp.setdefault(uid,{}).setdefault('photos',[]).append(fid)
-    bot.send_message(message.chat.id, f"📸 Добавлено фото ({len(temp[uid]['photos'])}).")
+    bot.send_message(message.chat.id, f"📸 Добавлено фото ({len(temp[uid]['photos'])}).",
+                     reply_markup=admin_inline_done_kb("aphoto_done", T, lang))
+
+@bot.message_handler(state=AdminOrderStates.photos)
+def a_order_photos_text(message: types.Message):
+    """Текст на шаге фото: «готово» завершает шаг, остальное — подсказка."""
+    if not require_admin_msg(message): return
+    txt=(message.text or '').strip().lower()
+    if txt in ('готово','done','ок','ok','всё','все'):
+        _order_summary(message.from_user.id, message.chat.id)
+        return
+    lang=get_lang(message.from_user.id)
+    bot.send_message(message.chat.id, "📸 Пришли фото или нажми «Готово».",
+                     reply_markup=admin_inline_done_kb("aphoto_done", T, lang))
 
 def _draft_as_order(data: Dict) -> Dict:
     """Черновик из temp в формате заказа — для order_money_lines."""
@@ -1010,12 +1094,15 @@ def _draft_as_order(data: Dict) -> Dict:
 @bot.callback_query_handler(func=lambda c: c.data=='aphoto_done', state=AdminOrderStates.photos)
 def aphoto_done(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
+    _order_summary(call.from_user.id, call.message.chat.id)
+    safe_answer(call)
+
+def _order_summary(uid:int, chat_id:int):
     data=temp.get(uid,{})
     site=db.get_site(data.get('site_id',0))
     if not site:
-        bot.send_message(call.message.chat.id, "❌ Участок не найден.")
-        safe_answer(call); return
+        bot.send_message(chat_id, "❌ Участок не найден.")
+        return
     o=_draft_as_order(data)
     is_other=o['work_type']=='other'
     lines=["📌 <b>Сводка заказа</b>",
@@ -1034,9 +1121,9 @@ def aphoto_done(call: types.CallbackQuery):
         types.InlineKeyboardButton("✅ Создать", callback_data="aconfirm_order"),
         types.InlineKeyboardButton("❌ Отмена", callback_data="acancel_order"),
     )
-    bot.send_message(call.message.chat.id, "\n".join(lines), reply_markup=kb)
-    bot.set_state(uid, AdminOrderStates.confirm, call.message.chat.id)
-    safe_answer(call)
+    kb.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="aback"))
+    bot.send_message(chat_id, "\n".join(lines), reply_markup=kb)
+    bot.set_state(uid, AdminOrderStates.confirm, chat_id)
 
 @bot.callback_query_handler(func=lambda c: c.data in ('aconfirm_order','acancel_order'), state=AdminOrderStates.confirm)
 def aconfirm_order(call: types.CallbackQuery):
@@ -1084,6 +1171,52 @@ def aconfirm_order(call: types.CallbackQuery):
     show_admin_menu(call.message.chat.id, uid)
     safe_answer(call)
 
+# ---------------- NEW: кнопка «⬅️ Назад» в мастере заказа ----------------
+
+@bot.callback_query_handler(func=lambda c: c.data=='aback')
+def order_step_back(call: types.CallbackQuery):
+    """Вернуться на предыдущий шаг мастера — по текущему state."""
+    if not require_admin_call(call): return
+    uid=call.from_user.id; chat_id=call.message.chat.id
+    try:
+        state=str(bot.get_state(uid, chat_id) or '')
+    except Exception:
+        state=''
+    ctx=temp.get(uid) or {}
+    # шаги управления зонами из карточки участка
+    if state in (AdminZoneManageStates.name.name, AdminZoneManageStates.area.name):
+        site_id=int(ctx.get('site_id',0))
+        temp.pop(uid,None); bot.delete_state(uid, chat_id)
+        _show_zones_manage(chat_id, site_id)
+        safe_answer(call); return
+    is_other=(ctx.get('work_type')=='other')
+    S=AdminOrderStates
+    back_map={
+        S.work_name.name: _ask_work_type,
+        S.amount.name: _ask_work_name,
+        S.zones.name: _ask_work_type,
+        S.zone_new_name.name: _show_zones_screen,
+        S.zone_new_area.name: _show_zones_screen,
+        S.manual_area.name: _show_zones_screen,
+        S.tariff.name: _show_zones_screen,
+        S.date.name: _ask_amount if is_other else _ask_tariff,
+        S.duration.name: _ask_date,
+        S.helper.name: _ask_duration,
+        S.helper_name.name: _ask_helper,
+        S.helper_pay.name: _ask_helper_name,
+        S.dad.name: _ask_helper,
+        S.notes.name: _ask_dad if is_other else _ask_helper,
+        S.photos.name: _ask_notes,
+        S.confirm.name: _ask_photos,
+    }
+    fn=back_map.get(state)
+    if not fn or ctx.get('flow') not in ('admin_order','admin_order_pick'):
+        temp.pop(uid,None); bot.delete_state(uid, chat_id)
+        show_admin_menu(chat_id, uid)
+    else:
+        fn(uid, chat_id)
+    safe_answer(call)
+
 # ---------------- NEW: раздел «Участки» ----------------
 
 @bot.callback_query_handler(func=lambda c: c.data=='asites')
@@ -1105,11 +1238,11 @@ def asites_search(message: types.Message):
     sites=db.search_sites(q, limit=20)
     if not sites:
         kb=types.InlineKeyboardMarkup(row_width=1)
-        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
         kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
         bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл:", reply_markup=kb)
         return
-    bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "asite", back_cb="asites"))
+    bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "asite", back_cb="asites", new_site_cb="anewsite_only"))
 
 # ---------------- NEW: зоны из карточки участка ----------------
 
@@ -1125,7 +1258,21 @@ def _show_zones_manage(chat_id:int, site_id:int):
 @bot.callback_query_handler(func=lambda c: c.data.startswith('azones:'))
 def azones(call: types.CallbackQuery):
     if not require_admin_call(call): return
+    uid=call.from_user.id
+    temp.pop(uid,None); bot.delete_state(uid, call.message.chat.id)
     _show_zones_manage(call.message.chat.id, int(call.data.split(':')[1]))
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('azdelq:'))
+def azdelq(call: types.CallbackQuery):
+    """Спросить подтверждение перед удалением зоны."""
+    if not require_admin_call(call): return
+    zone=db.get_zone(int(call.data.split(':')[1]))
+    if not zone:
+        safe_answer(call); return
+    bot.send_message(call.message.chat.id,
+                     f"⚠️ Удалить зону «{zone['name']}» ({zone['area_sotki']:g} сот)?",
+                     reply_markup=confirm_action_kb("🗑 Да, удалить зону", f"azdel:{zone['id']}", f"azones:{zone['site_id']}"))
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('azdel:'))
@@ -1141,9 +1288,11 @@ def azdel(call: types.CallbackQuery):
 def azadd(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
-    temp[uid]={'flow':'zone_manage','site_id':int(call.data.split(':')[1])}
+    site_id=int(call.data.split(':')[1])
+    temp[uid]={'flow':'zone_manage','site_id':site_id}
     bot.set_state(uid, AdminZoneManageStates.name, call.message.chat.id)
-    bot.send_message(call.message.chat.id, "🌿 Название зоны (например: перед домом):")
+    bot.send_message(call.message.chat.id, "🌿 Название зоны (например: перед домом):",
+                     reply_markup=prompt_cancel_kb(f"azones:{site_id}"))
     safe_answer(call)
 
 @bot.message_handler(state=AdminZoneManageStates.name)
@@ -1155,7 +1304,8 @@ def azadd_name(message: types.Message):
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['zone_name']=name
     bot.set_state(uid, AdminZoneManageStates.area, message.chat.id)
-    bot.send_message(message.chat.id, "📏 Площадь зоны (сотки):")
+    bot.send_message(message.chat.id, "📏 Площадь зоны (сотки):",
+                     reply_markup=prompt_cancel_kb(f"azones:{int(temp.get(uid,{}).get('site_id',0))}"))
 
 @bot.message_handler(state=AdminZoneManageStates.area)
 def azadd_area(message: types.Message):
@@ -1351,7 +1501,9 @@ def asite_show(chat_id:int, uid:int, site_id:int):
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite:'))
 def asite(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    asite_show(call.message.chat.id, call.from_user.id, int(call.data.split(':')[1]))
+    uid=call.from_user.id
+    temp.pop(uid,None); bot.delete_state(uid, call.message.chat.id)
+    asite_show(call.message.chat.id, uid, int(call.data.split(':')[1]))
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite_orders:'))
@@ -1370,6 +1522,7 @@ def asite_orders(call: types.CallbackQuery):
 def aorder_open(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id; lang=get_lang(uid)
+    temp.pop(uid,None); bot.delete_state(uid, call.message.chat.id)
     oid=int(call.data.split(':')[1])
     o=db.get_service_order(oid)
     if not o:
@@ -1447,7 +1600,8 @@ def asite_edit_field(call: types.CallbackQuery):
     prompts={'address':"📍 Новый адрес:","area":"📏 Новая площадь (сотки):",
              'name':"👤 Имя клиента:","contacts":"☎️ Телефон клиента:",
              'remind':"⏰ Через сколько дней напоминать о покосе (сейчас по умолчанию 30):"}
-    bot.send_message(call.message.chat.id, prompts.get(field,'Введите значение:'))
+    bot.send_message(call.message.chat.id, prompts.get(field,'Введите значение:'),
+                     reply_markup=prompt_cancel_kb(f"asite:{site_id}"))
     safe_answer(call)
 
 @bot.message_handler(state=AdminEditSiteStates.field)
@@ -1506,7 +1660,8 @@ def aorder_edit_field(call: types.CallbackQuery):
              'date':"📅 Новая дата:",
              'duration':"⏳ Новая длительность (2.5, 2:30, 9:30-12:00):",
              'notes':"📝 Новые заметки:"}
-    bot.send_message(call.message.chat.id, prompts.get(field,'Введите значение:'))
+    bot.send_message(call.message.chat.id, prompts.get(field,'Введите значение:'),
+                     reply_markup=prompt_cancel_kb(f"aorder:{oid}"))
     safe_answer(call)
 
 @bot.message_handler(state=AdminEditServiceOrderStates.field)
@@ -1637,7 +1792,7 @@ def armd_days(call: types.CallbackQuery):
     uid=call.from_user.id
     temp[uid]={'flow':'remind_snooze','site_id':int(call.data.split(':')[1])}
     bot.set_state(uid, AdminRemindStates.snooze_days, call.message.chat.id)
-    bot.send_message(call.message.chat.id, "⏲ На сколько дней отложить?")
+    bot.send_message(call.message.chat.id, "⏲ На сколько дней отложить?", reply_markup=prompt_cancel_kb("amenu"))
     safe_answer(call)
 
 @bot.message_handler(state=AdminRemindStates.snooze_days)

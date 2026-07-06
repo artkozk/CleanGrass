@@ -167,22 +167,22 @@ def sites_browse_kb(sites) -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(row_width=1)
     for s in sites[:20]:
         kb.add(InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"asite:{s['id']}"))
-    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
     kb.add(InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
     return kb
 
-def search_results_kb(sites, pick_prefix:str, back_cb:str="amenu") -> InlineKeyboardMarkup:
+def search_results_kb(sites, pick_prefix:str, back_cb:str="amenu", new_site_cb:str="aneworder_newsite") -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(row_width=1)
     for s in sites[:20]:
         kb.add(InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"{pick_prefix}:{s['id']}"))
-    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data=new_site_cb))
     kb.add(InlineKeyboardButton("↩️ В меню", callback_data=back_cb))
     return kb
 
 def zones_manage_kb(zones, site_id:int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(row_width=1)
     for z in zones[:30]:
-        kb.add(InlineKeyboardButton(f"🗑 {z['name']} ({z['area_sotki']:g} сот)", callback_data=f"azdel:{z['id']}"))
+        kb.add(InlineKeyboardButton(f"🗑 {z['name']} ({z['area_sotki']:g} сот)", callback_data=f"azdelq:{z['id']}"))
     kb.add(InlineKeyboardButton("➕ Добавить зону", callback_data=f"azadd:{site_id}"))
     kb.add(InlineKeyboardButton("↩️ К участку", callback_data=f"asite:{site_id}"))
     return kb
@@ -285,11 +285,21 @@ def admin_edit_order_kb(order_id:int, t, lang) -> InlineKeyboardMarkup:
 
 def admin_inline_done_kb(done_cb:str, t, lang) -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton(t(lang,'admin_photos_done'), callback_data=done_cb))
-    kb.add(InlineKeyboardButton(t(lang,'cancel'), callback_data="amenu"))
+    kb.add(InlineKeyboardButton("✅ " + t(lang,'admin_photos_done'), callback_data=done_cb))
+    _nav_row(kb)
     return kb
 
 # ---- NEW: тип работы, зоны, помощник, папина доля, дата/тариф кнопками ----
+
+def _nav_row(kb: InlineKeyboardMarkup, back: bool = True):
+    """Общий ряд навигации шага заказа: Назад + Отмена."""
+    if back:
+        kb.add(
+            InlineKeyboardButton("⬅️ Назад", callback_data="aback"),
+            InlineKeyboardButton("❌ Отмена", callback_data="amenu"),
+        )
+    else:
+        kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
 
 def work_type_kb() -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup(row_width=2)
@@ -297,7 +307,7 @@ def work_type_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton("🌱 Покос", callback_data="awt:mow"),
         InlineKeyboardButton("🔨 Другая работа", callback_data="awt:other"),
     )
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb, back=False)
     return kb
 
 def zones_kb(zones, selected_ids, site_area, sel_sum) -> InlineKeyboardMarkup:
@@ -313,14 +323,16 @@ def zones_kb(zones, selected_ids, site_area, sel_sum) -> InlineKeyboardMarkup:
     kb.add(InlineKeyboardButton("✍️ Ввести площадь вручную", callback_data="azman"))
     if selected_ids:
         kb.add(InlineKeyboardButton(f"▶️ Далее ({sel_sum:g} сот)", callback_data="azok"))
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb)
     return kb
+
+DEFAULT_TARIFFS = [300, 350, 400, 450, 500]
 
 def tariff_quick_kb(tariffs) -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup(row_width=3)
-    if tariffs:
-        kb.add(*[InlineKeyboardButton(f"{v} руб", callback_data=f"atrf:{v}") for v in tariffs[:6]])
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    vals = tariffs[:6] if tariffs else DEFAULT_TARIFFS
+    kb.add(*[InlineKeyboardButton(f"{v} руб", callback_data=f"atrf:{v}") for v in vals])
+    _nav_row(kb)
     return kb
 
 def date_quick_kb() -> InlineKeyboardMarkup:
@@ -329,7 +341,15 @@ def date_quick_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton("📅 Сегодня", callback_data="adate:today"),
         InlineKeyboardButton("📅 Вчера", callback_data="adate:yesterday"),
     )
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb)
+    return kb
+
+def duration_quick_kb() -> InlineKeyboardMarkup:
+    """Быстрые кнопки длительности (значение — минуты)."""
+    kb=InlineKeyboardMarkup(row_width=3)
+    presets = [("30мин",30), ("1ч",60), ("1.5ч",90), ("2ч",120), ("2.5ч",150), ("3ч",180)]
+    kb.add(*[InlineKeyboardButton(label, callback_data=f"adur:{mins}") for label, mins in presets])
+    _nav_row(kb)
     return kb
 
 def helper_yn_kb() -> InlineKeyboardMarkup:
@@ -338,7 +358,7 @@ def helper_yn_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton("🤝 Был", callback_data="ahelp:yes"),
         InlineKeyboardButton("🙅 Не было", callback_data="ahelp:no"),
     )
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb)
     return kb
 
 def helper_names_kb(names) -> InlineKeyboardMarkup:
@@ -346,7 +366,7 @@ def helper_names_kb(names) -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup(row_width=2)
     if names:
         kb.add(*[InlineKeyboardButton(n, callback_data=f"ahname:{i}") for i, n in enumerate(names[:8])])
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb)
     return kb
 
 def dad_share_kb() -> InlineKeyboardMarkup:
@@ -355,13 +375,25 @@ def dad_share_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton("👨 Папина доля: да", callback_data="adad:yes"),
         InlineKeyboardButton("Без папы", callback_data="adad:no"),
     )
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb)
     return kb
 
-def skip_kb(cb:str="askip") -> InlineKeyboardMarkup:
+def skip_kb(cb:str="askip", back:bool=False) -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("⏭ Пропустить", callback_data=cb))
-    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="amenu"))
+    _nav_row(kb, back=back)
+    return kb
+
+def step_nav_kb(back:bool=True) -> InlineKeyboardMarkup:
+    """Клавиатура для текстовых шагов заказа: Назад + Отмена."""
+    kb=InlineKeyboardMarkup()
+    _nav_row(kb, back=back)
+    return kb
+
+def prompt_cancel_kb(back_cb:str, label:str="↩️ Отмена") -> InlineKeyboardMarkup:
+    """Одна кнопка возврата для одиночных текстовых промптов (редактирование и т.п.)."""
+    kb=InlineKeyboardMarkup()
+    kb.add(InlineKeyboardButton(label, callback_data=back_cb))
     return kb
 
 # ---- NEW: статистика и напоминания ----
