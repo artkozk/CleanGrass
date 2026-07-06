@@ -4,3 +4,5 @@ __pycache__/
 bot.log
 .venv/
 venv/
+grass_orders.db
+*.db
