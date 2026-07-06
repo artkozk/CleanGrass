@@ -25,7 +25,7 @@ from keyboards import (
     main_menu, cancel_kb, tariffs_kb, addresses_kb, confirm_kb, period_kb,
     order_actions_kb, delete_confirm_kb, stats_filters_kb, edit_order_kb, settings_kb,
     client_start_kb, client_site_nav_kb, client_contacts_reply_kb,
-    admin_menu_kb, admin_requests_list_kb, admin_request_actions_kb, admin_archive_kb,
+    admin_menu_kb, admin_more_kb, admin_requests_list_kb, admin_request_actions_kb, admin_archive_kb,
     admin_site_actions_kb, admin_sites_kb, admin_orders_list_kb, admin_order_actions_kb,
     admin_edit_site_kb, admin_edit_order_kb, admin_inline_done_kb,
     work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb, duration_quick_kb,
@@ -1345,12 +1345,18 @@ def asitedel_yes(call: types.CallbackQuery):
     bot.send_message(call.message.chat.id, "🗑 Участок удалён." if ok else "❌ Не удалось удалить.")
     asites(call)
 
-@bot.callback_query_handler(func=lambda c: c.data=='aarchive')
-def aarchive(call: types.CallbackQuery):
+@bot.callback_query_handler(func=lambda c: c.data=='amore')
+def amore(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id; lang=get_lang(uid)
-    bot.send_message(call.message.chat.id, "🗂 Архив:", reply_markup=admin_archive_kb(T,lang))
+    temp.pop(uid,None); bot.delete_state(uid, call.message.chat.id)
+    bot.send_message(call.message.chat.id, "⋯ Ещё:", reply_markup=admin_more_kb(T,lang))
     safe_answer(call)
+
+# Легаси-кнопка «Архив» со старых сообщений — ведёт в «Ещё»
+@bot.callback_query_handler(func=lambda c: c.data=='aarchive')
+def aarchive(call: types.CallbackQuery):
+    amore(call)
 
 @bot.callback_query_handler(func=lambda c: c.data=='astats_all')
 def astats_all(call: types.CallbackQuery):
@@ -1364,7 +1370,7 @@ def astats_all(call: types.CallbackQuery):
         f"💰 Выручка: <b>{fmt_price(s['total_income'])}</b> руб",
         f"📈 Средний заказ: <b>{fmt_price(s['avg_order_price'])}</b> руб",
     ])
-    bot.send_message(call.message.chat.id, text, reply_markup=admin_archive_kb(T,lang))
+    bot.send_message(call.message.chat.id, text, reply_markup=admin_more_kb(T,lang))
     safe_answer(call)
 
 # шаги поиска: (state, ключ, вопрос, кнопка «пропустить»)
@@ -1403,13 +1409,13 @@ def _find_run(uid:int, chat_id:int):
     bot.delete_state(uid, chat_id)
     temp.pop(uid,None)
     if not res:
-        bot.send_message(chat_id, T(lang,'find_results_empty'), reply_markup=admin_archive_kb(T,lang)); return
+        bot.send_message(chat_id, T(lang,'find_results_empty'), reply_markup=admin_more_kb(T,lang)); return
     kb=types.InlineKeyboardMarkup()
     lines=["🔎 <b>Результаты</b>:"]
     for it in res:
         lines.append(f"#{it['id']} • {fmt_date_display(it['service_at'])} • {it['address']} • {fmt_price(it['total'])} руб")
         kb.add(types.InlineKeyboardButton(f"🧾 #{it['id']} — {it['address']}", callback_data=f"aorder:{it['id']}"))
-    kb.add(types.InlineKeyboardButton(T(lang,'admin_back_menu'), callback_data="aarchive"))
+    kb.add(types.InlineKeyboardButton(T(lang,'admin_back_menu'), callback_data="amenu"))
     bot.send_message(chat_id, "\n".join(lines[:60]), reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data=='afind')

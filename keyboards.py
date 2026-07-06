@@ -142,16 +142,34 @@ def client_contacts_reply_kb(t, lang) -> ReplyKeyboardMarkup:
     return kb
 
 def admin_menu_kb(new_count:int, t, lang, remind_count:int=0) -> InlineKeyboardMarkup:
+    """Минимальное меню: только быстрые действия. Срочное (напоминания/заявки)
+    появляется отдельным рядом, лишь когда есть что показать. Остальное — в «Ещё»."""
     kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(InlineKeyboardButton("🧾 Новый заказ", callback_data="aneworder"))
     kb.add(
-        InlineKeyboardButton(t(lang,'admin_create_order'), callback_data="aneworder"),
         InlineKeyboardButton("🏡 Участки", callback_data="asites"),
         InlineKeyboardButton("📊 Статистика", callback_data="astats_menu"),
-        InlineKeyboardButton(f"⏰ Напоминания ({remind_count})", callback_data="aremind"),
-        InlineKeyboardButton(t(lang,'admin_archive'), callback_data="aarchive"),
-        InlineKeyboardButton(f"{t(lang,'admin_notifications')} ({new_count})", callback_data="anotifs"),
-        InlineKeyboardButton(t(lang,'settings'), callback_data="settings"),
     )
+    alerts=[]
+    if remind_count:
+        alerts.append(InlineKeyboardButton(f"⏰ Напоминания ({remind_count})", callback_data="aremind"))
+    if new_count:
+        alerts.append(InlineKeyboardButton(f"🔔 Заявки ({new_count})", callback_data="anotifs"))
+    if alerts:
+        kb.add(*alerts)
+    kb.add(InlineKeyboardButton("⋯ Ещё", callback_data="amore"))
+    return kb
+
+def admin_more_kb(t, lang) -> InlineKeyboardMarkup:
+    """Раздел «Ещё»: всё нечастое."""
+    kb=InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("🔎 Найти заказ", callback_data="afind"),
+        InlineKeyboardButton("🔔 Заявки", callback_data="anotifs"),
+        InlineKeyboardButton("⏰ Напоминания", callback_data="aremind"),
+        InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+    )
+    kb.add(InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
     return kb
 
 def site_pick_kb(sites) -> InlineKeyboardMarkup:
@@ -254,7 +272,7 @@ def admin_order_actions_kb(order_id:int, t, lang) -> InlineKeyboardMarkup:
         InlineKeyboardButton(t(lang,'admin_edit_order'), callback_data=f"aorder_edit:{order_id}"),
         InlineKeyboardButton(t(lang,'admin_delete_order'), callback_data=f"adel:{order_id}"),
     )
-    kb.add(InlineKeyboardButton(t(lang,'admin_back_menu'), callback_data="aarchive"))
+    kb.add(InlineKeyboardButton(t(lang,'admin_back_menu'), callback_data="amenu"))
     return kb
 
 def admin_edit_site_kb(site_id:int, t, lang) -> InlineKeyboardMarkup:
