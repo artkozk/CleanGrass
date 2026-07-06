@@ -145,6 +145,15 @@ try:
     db.backup_to(bpath)
     check('backup_exists', os.path.exists(bpath) and os.path.getsize(bpath) > 0, True)
 
+    # ---------- удаление участка целиком ----------
+    check('site_in_recent', any(s['id'] == sid for s in db.list_sites_recent()), True)
+    n_orders = db.count_orders_for_site(sid)
+    check('site_orders_counted', n_orders >= 3, True)
+    db.delete_site(sid)
+    check('site_deleted', db.get_site(sid), None)
+    check('site_zones_deleted', db.list_zones(sid), [])
+    check('site_orders_deleted', db.count_orders_for_site(sid), 0)
+
     db.conn.close()
 finally:
     shutil.rmtree(tmpdir, ignore_errors=True)

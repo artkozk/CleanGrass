@@ -83,3 +83,10 @@ class AdminEditServiceOrderStates(StatesGroup):
 
 class AdminRemindStates(StatesGroup):
     snooze_days = State()  # «отложить на N дней»
+
+class AdminSitesStates(StatesGroup):
+    search = State()  # поиск в разделе «Участки»
+
+class AdminZoneManageStates(StatesGroup):
+    name = State()  # добавление зоны из карточки участка
+    area = State()

@@ -145,11 +145,53 @@ def admin_menu_kb(new_count:int, t, lang, remind_count:int=0) -> InlineKeyboardM
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton(t(lang,'admin_create_order'), callback_data="aneworder"),
-        InlineKeyboardButton(t(lang,'admin_archive'), callback_data="aarchive"),
+        InlineKeyboardButton("🏡 Участки", callback_data="asites"),
         InlineKeyboardButton("📊 Статистика", callback_data="astats_menu"),
         InlineKeyboardButton(f"⏰ Напоминания ({remind_count})", callback_data="aremind"),
+        InlineKeyboardButton(t(lang,'admin_archive'), callback_data="aarchive"),
         InlineKeyboardButton(f"{t(lang,'admin_notifications')} ({new_count})", callback_data="anotifs"),
         InlineKeyboardButton(t(lang,'settings'), callback_data="settings"),
+    )
+    return kb
+
+def site_pick_kb(sites) -> InlineKeyboardMarkup:
+    """Выбор участка для нового заказа: последние кнопками, поиск текстом."""
+    kb = InlineKeyboardMarkup(row_width=1)
+    for s in sites[:10]:
+        kb.add(InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"aneworder_site:{s['id']}"))
+    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+    kb.add(InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
+    return kb
+
+def sites_browse_kb(sites) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    for s in sites[:20]:
+        kb.add(InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"asite:{s['id']}"))
+    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+    kb.add(InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
+    return kb
+
+def search_results_kb(sites, pick_prefix:str, back_cb:str="amenu") -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    for s in sites[:20]:
+        kb.add(InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"{pick_prefix}:{s['id']}"))
+    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+    kb.add(InlineKeyboardButton("↩️ В меню", callback_data=back_cb))
+    return kb
+
+def zones_manage_kb(zones, site_id:int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    for z in zones[:30]:
+        kb.add(InlineKeyboardButton(f"🗑 {z['name']} ({z['area_sotki']:g} сот)", callback_data=f"azdel:{z['id']}"))
+    kb.add(InlineKeyboardButton("➕ Добавить зону", callback_data=f"azadd:{site_id}"))
+    kb.add(InlineKeyboardButton("↩️ К участку", callback_data=f"asite:{site_id}"))
+    return kb
+
+def confirm_action_kb(yes_label:str, yes_cb:str, back_cb:str) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton(yes_label, callback_data=yes_cb),
+        InlineKeyboardButton("↩️ Отмена", callback_data=back_cb),
     )
     return kb
 
@@ -187,14 +229,16 @@ def admin_sites_kb(sites: List[Dict], t, lang) -> InlineKeyboardMarkup:
     return kb
 
 def admin_site_actions_kb(site_id:int, t, lang) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup(row_width=1)
+    kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton(t(lang,'admin_create_order'), callback_data=f"aneworder_site:{site_id}"),
         InlineKeyboardButton(t(lang,'admin_site_orders'), callback_data=f"asite_orders:{site_id}"),
+        InlineKeyboardButton("🌱 Зоны", callback_data=f"azones:{site_id}"),
         InlineKeyboardButton(t(lang,'admin_site_edit'), callback_data=f"asite_edit:{site_id}"),
         InlineKeyboardButton(t(lang,'admin_site_delete_all'), callback_data=f"adelall:{site_id}"),
-        InlineKeyboardButton(t(lang,'admin_back_menu'), callback_data="aarchive"),
+        InlineKeyboardButton("🗑 Удалить участок", callback_data=f"asitedel:{site_id}"),
     )
+    kb.add(InlineKeyboardButton("↩️ К участкам", callback_data="asites"))
     return kb
 
 def admin_orders_list_kb(site_id:int, orders: List[Dict], t, lang) -> InlineKeyboardMarkup:

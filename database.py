@@ -392,6 +392,29 @@ class Database:
         row = self.conn.execute("SELECT * FROM sites WHERE id=?", (site_id,)).fetchone()
         return dict(row) if row else None
 
+    def list_sites_recent(self, limit:int=20) -> List[Dict]:
+        rows = self.conn.execute("""
+            SELECT * FROM sites ORDER BY COALESCE(last_service_at, created_at) DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_orders_for_site(self, site_id:int) -> int:
+        row=self.conn.execute("SELECT COUNT(*) AS c FROM service_orders WHERE site_id=?", (site_id,)).fetchone()
+        return int(row['c'] or 0)
+
+    def delete_site(self, site_id:int) -> bool:
+        """Полное удаление участка: заказы, фото, зоны, сам участок. Заявки отвязываются."""
+        with self.conn:
+            self.conn.execute("""
+                DELETE FROM service_photos
+                WHERE order_id IN (SELECT id FROM service_orders WHERE site_id=?)
+            """, (site_id,))
+            self.conn.execute("DELETE FROM service_orders WHERE site_id=?", (site_id,))
+            self.conn.execute("DELETE FROM site_zones WHERE site_id=?", (site_id,))
+            self.conn.execute("UPDATE requests SET site_id=NULL WHERE site_id=?", (site_id,))
+            cur=self.conn.execute("DELETE FROM sites WHERE id=?", (site_id,))
+            return cur.rowcount>0
+
     def update_site(self, site_id:int, fields:Dict) -> bool:
         allowed={'address','area_sotki','contact_name','contact_phone','client_tg_id'}
         sets=[]; params=[]

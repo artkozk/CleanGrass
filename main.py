@@ -18,7 +18,8 @@ from money import parse_duration_minutes, fmt_minutes, calc_money, per_hour
 from states import (
     OrderStates, DeleteStates, HistoryRangeStates, StatsFilterStates, EditOrderStates,
     AdminRegStates, ClientRequestStates, AdminOrderStates, AdminDeleteAllStates,
-    AdminFindStates, AdminEditSiteStates, AdminEditServiceOrderStates, AdminRemindStates
+    AdminFindStates, AdminEditSiteStates, AdminEditServiceOrderStates, AdminRemindStates,
+    AdminSitesStates, AdminZoneManageStates
 )
 from keyboards import (
     main_menu, cancel_kb, tariffs_kb, addresses_kb, confirm_kb, period_kb,
@@ -29,7 +30,8 @@ from keyboards import (
     admin_edit_site_kb, admin_edit_order_kb, admin_inline_done_kb,
     work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb,
     helper_yn_kb, helper_names_kb, dad_share_kb, skip_kb,
-    stats_period_kb, remind_actions_kb
+    stats_period_kb, remind_actions_kb,
+    site_pick_kb, sites_browse_kb, search_results_kb, zones_manage_kb, confirm_action_kb
 )
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', format='%(asctime)s %(levelname)s %(message)s')
@@ -209,6 +211,18 @@ def start(message: types.Message):
     show_client_start(message.chat.id, uid)
     if is_admin(uid):
         show_admin_menu(message.chat.id, uid)
+
+# /cancel и «отмена» — выйти из любого диалога (зарегистрирован раньше state-обработчиков)
+@bot.message_handler(commands=['cancel'])
+@bot.message_handler(func=lambda m: (m.text or '').strip().lower() in ('отмена','отменить','cancel'))
+def cancel_command(message: types.Message):
+    uid=message.from_user.id
+    temp.pop(uid, None)
+    bot.delete_state(uid, message.chat.id)
+    if is_admin(uid):
+        show_admin_menu(message.chat.id, uid)
+    else:
+        show_client_start(message.chat.id, uid)
 
 # ---------------- settings (shared) ----------------
 @bot.callback_query_handler(func=lambda c: c.data=='settings')
@@ -543,33 +557,32 @@ def areq_done(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda c: c.data=='aneworder')
 def aneworder(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
+    uid=call.from_user.id
     temp[uid]={'flow':'admin_order_pick'}
     bot.set_state(uid, AdminOrderStates.site_search, call.message.chat.id)
-    bot.send_message(call.message.chat.id, T(lang,'admin_search_site'))
+    sites=db.list_sites_recent(limit=10)
+    text="Выбери участок кнопкой — или просто напиши часть адреса, я найду:" if sites else \
+         "Участков пока нет — создай первый:"
+    bot.send_message(call.message.chat.id, text, reply_markup=site_pick_kb(sites))
     safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.site_search)
 def a_site_search(message: types.Message):
     if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
+    uid=message.from_user.id
     q=(message.text or '').strip()
-    if q.lower()==T(lang,'cancel').lower():
-        temp.pop(uid,None); bot.delete_state(uid, message.chat.id); show_admin_menu(message.chat.id, uid); return
     if q=='-':
         bot.set_state(uid, AdminOrderStates.new_site_address, message.chat.id)
-        bot.send_message(message.chat.id, T(lang,'admin_new_site_address'))
+        bot.send_message(message.chat.id, T(get_lang(uid),'admin_new_site_address'))
         return
     sites=db.search_sites(q, limit=20)
     if not sites:
-        bot.send_message(message.chat.id, "Ничего не найдено. Отправь '-' чтобы создать новый участок.")
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        kb.add(types.InlineKeyboardButton("➕ Создать новый участок", callback_data="aneworder_newsite"))
+        kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
+        bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл. Попробуй написать иначе — или создай участок:", reply_markup=kb)
         return
-    kb=types.InlineKeyboardMarkup()
-    for s in sites:
-        kb.add(types.InlineKeyboardButton(f"📍 {s['address']}", callback_data=f"aneworder_site:{s['id']}"))
-    kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
-    kb.add(types.InlineKeyboardButton(T(lang,'admin_back_menu'), callback_data="amenu"))
-    bot.send_message(message.chat.id, T(lang,'admin_pick_site'), reply_markup=kb)
+    bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "aneworder_site"))
 
 @bot.callback_query_handler(func=lambda c: c.data=='aneworder_newsite')
 def aneworder_newsite(call: types.CallbackQuery):
@@ -1071,6 +1084,117 @@ def aconfirm_order(call: types.CallbackQuery):
     show_admin_menu(call.message.chat.id, uid)
     safe_answer(call)
 
+# ---------------- NEW: раздел «Участки» ----------------
+
+@bot.callback_query_handler(func=lambda c: c.data=='asites')
+def asites(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id
+    temp.pop(uid,None)
+    bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
+    sites=db.list_sites_recent(limit=20)
+    text="🏡 Участки (свежие сверху). Открой кнопкой — или напиши часть адреса для поиска:" if sites else \
+         "🏡 Участков пока нет — создай первый:"
+    bot.send_message(call.message.chat.id, text, reply_markup=sites_browse_kb(sites))
+    safe_answer(call)
+
+@bot.message_handler(state=AdminSitesStates.search)
+def asites_search(message: types.Message):
+    if not require_admin_msg(message): return
+    q=(message.text or '').strip()
+    sites=db.search_sites(q, limit=20)
+    if not sites:
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite"))
+        kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
+        bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл:", reply_markup=kb)
+        return
+    bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "asite", back_cb="asites"))
+
+# ---------------- NEW: зоны из карточки участка ----------------
+
+def _show_zones_manage(chat_id:int, site_id:int):
+    zones=db.list_zones(site_id)
+    site=db.get_site(site_id) or {}
+    total=sum(z['area_sotki'] for z in zones)
+    text=(f"🌱 Зоны участка «{site.get('address','—')}»\n"
+          + (f"Всего зон: {len(zones)}, суммарно {total:g} сот.\n" if zones else "Зон пока нет.\n")
+          + "Нажми на зону, чтобы удалить её:")
+    bot.send_message(chat_id, text, reply_markup=zones_manage_kb(zones, site_id))
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('azones:'))
+def azones(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    _show_zones_manage(call.message.chat.id, int(call.data.split(':')[1]))
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('azdel:'))
+def azdel(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    zone=db.get_zone(int(call.data.split(':')[1]))
+    if zone:
+        db.delete_zone(zone['id'])
+        _show_zones_manage(call.message.chat.id, zone['site_id'])
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('azadd:'))
+def azadd(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id
+    temp[uid]={'flow':'zone_manage','site_id':int(call.data.split(':')[1])}
+    bot.set_state(uid, AdminZoneManageStates.name, call.message.chat.id)
+    bot.send_message(call.message.chat.id, "🌿 Название зоны (например: перед домом):")
+    safe_answer(call)
+
+@bot.message_handler(state=AdminZoneManageStates.name)
+def azadd_name(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id; lang=get_lang(uid)
+    name=(message.text or '').strip()
+    if len(name)<2:
+        bot.send_message(message.chat.id, T(lang,'err_value')); return
+    temp.setdefault(uid,{})['zone_name']=name
+    bot.set_state(uid, AdminZoneManageStates.area, message.chat.id)
+    bot.send_message(message.chat.id, "📏 Площадь зоны (сотки):")
+
+@bot.message_handler(state=AdminZoneManageStates.area)
+def azadd_area(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id; lang=get_lang(uid)
+    try:
+        area=float((message.text or '').strip().replace(',','.'))
+        if area<=0: raise ValueError
+    except Exception:
+        bot.send_message(message.chat.id, T(lang,'err_value')); return
+    ctx=temp.pop(uid,{})
+    bot.delete_state(uid, message.chat.id)
+    site_id=int(ctx.get('site_id',0))
+    db.add_zone(site_id, ctx.get('zone_name','зона'), area)
+    _show_zones_manage(message.chat.id, site_id)
+
+# ---------------- NEW: удаление участка (с подтверждением кнопкой) ----------------
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('asitedel:'))
+def asitedel(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    site_id=int(call.data.split(':')[1])
+    site=db.get_site(site_id)
+    if not site:
+        safe_answer(call); return
+    n=db.count_orders_for_site(site_id)
+    bot.send_message(call.message.chat.id,
+                     f"⚠️ Удалить участок «{site['address']}» насовсем?\nВместе с ним удалятся {n} заказ(ов), фото и зоны.",
+                     reply_markup=confirm_action_kb("🗑 Да, удалить участок", f"asitedel_yes:{site_id}", f"asite:{site_id}"))
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('asitedel_yes:'))
+def asitedel_yes(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    site_id=int(call.data.split(':')[1])
+    ok=db.delete_site(site_id)
+    bot.send_message(call.message.chat.id, "🗑 Участок удалён." if ok else "❌ Не удалось удалить.")
+    asites(call)
+
 @bot.callback_query_handler(func=lambda c: c.data=='aarchive')
 def aarchive(call: types.CallbackQuery):
     if not require_admin_call(call): return
@@ -1093,95 +1217,124 @@ def astats_all(call: types.CallbackQuery):
     bot.send_message(call.message.chat.id, text, reply_markup=admin_archive_kb(T,lang))
     safe_answer(call)
 
-@bot.callback_query_handler(func=lambda c: c.data=='afind')
-def afind(call: types.CallbackQuery):
-    if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
-    temp[uid]={'flow':'find'}
-    bot.set_state(uid, AdminFindStates.address, call.message.chat.id)
-    bot.send_message(call.message.chat.id, T(lang,'find_enter_address'))
-    safe_answer(call)
+# шаги поиска: (state, ключ, вопрос, кнопка «пропустить»)
+_FIND_STEPS=[
+    (AdminFindStates.address,   'f_addr',  "🔎 Адрес (можно часть):",  'afsk_addr'),
+    (AdminFindStates.date_from, 'f_dfrom', "📅 Дата ОТ:",              'afsk_dfrom'),
+    (AdminFindStates.date_to,   'f_dto',   "📅 Дата ДО:",              'afsk_dto'),
+    (AdminFindStates.price_min, 'f_pmin',  "💰 Сумма ОТ (руб):",       'afsk_pmin'),
+    (AdminFindStates.price_max, 'f_pmax',  "💰 Сумма ДО (руб):",       'afsk_pmax'),
+]
 
-@bot.message_handler(state=AdminFindStates.address)
-def afind_addr(message: types.Message):
-    if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
-    temp.setdefault(uid,{})['f_addr']=(message.text or '').strip()
-    bot.set_state(uid, AdminFindStates.date_from, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'find_enter_date_from'))
+def _find_ask(uid:int, chat_id:int, step:int):
+    state, _, prompt, skip_cb=_FIND_STEPS[step]
+    temp.setdefault(uid,{})['f_step']=step
+    bot.set_state(uid, state, chat_id)
+    bot.send_message(chat_id, prompt, reply_markup=skip_kb(skip_cb))
 
-@bot.message_handler(state=AdminFindStates.date_from)
-def afind_dfrom(message: types.Message):
-    if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
-    txt=(message.text or '').strip()
-    dt=parse_date(txt) if txt!='-' else None
-    temp.setdefault(uid,{})['f_dfrom']=dt.strftime('%Y-%m-%d') if dt else None
-    bot.set_state(uid, AdminFindStates.date_to, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'find_enter_date_to'))
+def _find_next(uid:int, chat_id:int):
+    step=temp.setdefault(uid,{}).get('f_step',0)
+    if step+1 < len(_FIND_STEPS):
+        _find_ask(uid, chat_id, step+1)
+    else:
+        _find_run(uid, chat_id)
 
-@bot.message_handler(state=AdminFindStates.date_to)
-def afind_dto(message: types.Message):
-    if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
-    txt=(message.text or '').strip()
-    dt=parse_date(txt) if txt!='-' else None
-    temp.setdefault(uid,{})['f_dto']=dt.strftime('%Y-%m-%d') if dt else None
-    bot.set_state(uid, AdminFindStates.price_min, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'find_enter_price_min'))
-
-@bot.message_handler(state=AdminFindStates.price_min)
-def afind_pmin(message: types.Message):
-    if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
-    txt=(message.text or '').strip()
-    pmin=None
-    if txt!='-':
-        try: pmin=float(txt.replace(',','.'))
-        except Exception: pmin=None
-    temp.setdefault(uid,{})['f_pmin']=pmin
-    bot.set_state(uid, AdminFindStates.price_max, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'find_enter_price_max'))
-
-@bot.message_handler(state=AdminFindStates.price_max)
-def afind_pmax(message: types.Message):
-    if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
-    txt=(message.text or '').strip()
-    pmax=None
-    if txt!='-':
-        try: pmax=float(txt.replace(',','.'))
-        except Exception: pmax=None
+def _find_run(uid:int, chat_id:int):
+    lang=get_lang(uid)
     ctx=temp.get(uid,{})
     res=db.find_service_orders(
         address_like=ctx.get('f_addr'),
         date_from=ctx.get('f_dfrom'),
         date_to=ctx.get('f_dto'),
         price_min=ctx.get('f_pmin'),
-        price_max=pmax,
+        price_max=ctx.get('f_pmax'),
         limit=50
     )
-    bot.delete_state(uid, message.chat.id)
+    bot.delete_state(uid, chat_id)
     temp.pop(uid,None)
     if not res:
-        bot.send_message(message.chat.id, T(lang,'find_results_empty'), reply_markup=admin_archive_kb(T,lang)); return
+        bot.send_message(chat_id, T(lang,'find_results_empty'), reply_markup=admin_archive_kb(T,lang)); return
     kb=types.InlineKeyboardMarkup()
     lines=["🔎 <b>Результаты</b>:"]
     for it in res:
         lines.append(f"#{it['id']} • {fmt_date_display(it['service_at'])} • {it['address']} • {fmt_price(it['total'])} руб")
         kb.add(types.InlineKeyboardButton(f"🧾 #{it['id']} — {it['address']}", callback_data=f"aorder:{it['id']}"))
     kb.add(types.InlineKeyboardButton(T(lang,'admin_back_menu'), callback_data="aarchive"))
-    bot.send_message(message.chat.id, "\n".join(lines[:60]), reply_markup=kb)
+    bot.send_message(chat_id, "\n".join(lines[:60]), reply_markup=kb)
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith('asite:'))
-def asite(call: types.CallbackQuery):
+@bot.callback_query_handler(func=lambda c: c.data=='afind')
+def afind(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
-    site_id=int(call.data.split(':')[1])
+    uid=call.from_user.id
+    temp[uid]={'flow':'find'}
+    _find_ask(uid, call.message.chat.id, 0)
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('afsk_'))
+def afind_skip(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id
+    step=temp.setdefault(uid,{}).get('f_step',0)
+    temp[uid][_FIND_STEPS[step][1]]=None
+    _find_next(uid, call.message.chat.id)
+    safe_answer(call)
+
+@bot.message_handler(state=AdminFindStates.address)
+def afind_addr(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id
+    txt=(message.text or '').strip()
+    temp.setdefault(uid,{})['f_addr']=txt if txt!='-' else None
+    _find_next(uid, message.chat.id)
+
+@bot.message_handler(state=AdminFindStates.date_from)
+def afind_dfrom(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id
+    txt=(message.text or '').strip()
+    dt=parse_date(txt) if txt!='-' else None
+    temp.setdefault(uid,{})['f_dfrom']=dt.strftime('%Y-%m-%d') if dt else None
+    _find_next(uid, message.chat.id)
+
+@bot.message_handler(state=AdminFindStates.date_to)
+def afind_dto(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id
+    txt=(message.text or '').strip()
+    dt=parse_date(txt) if txt!='-' else None
+    temp.setdefault(uid,{})['f_dto']=dt.strftime('%Y-%m-%d') if dt else None
+    _find_next(uid, message.chat.id)
+
+@bot.message_handler(state=AdminFindStates.price_min)
+def afind_pmin(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id
+    txt=(message.text or '').strip()
+    pmin=None
+    if txt!='-':
+        try: pmin=float(txt.replace(',','.'))
+        except Exception: pmin=None
+    temp.setdefault(uid,{})['f_pmin']=pmin
+    _find_next(uid, message.chat.id)
+
+@bot.message_handler(state=AdminFindStates.price_max)
+def afind_pmax(message: types.Message):
+    if not require_admin_msg(message): return
+    uid=message.from_user.id
+    txt=(message.text or '').strip()
+    pmax=None
+    if txt!='-':
+        try: pmax=float(txt.replace(',','.'))
+        except Exception: pmax=None
+    temp.setdefault(uid,{})['f_pmax']=pmax
+    _find_next(uid, message.chat.id)
+
+def asite_show(chat_id:int, uid:int, site_id:int):
+    lang=get_lang(uid)
     s=db.get_site(site_id)
     if not s:
-        bot.send_message(call.message.chat.id, "❌ Участок не найден.")
-        safe_answer(call); return
+        bot.send_message(chat_id, "❌ Участок не найден.")
+        return
     contacts = "—"
     if s.get('contact_phone') or s.get('contact_name'):
         contacts = f"{s.get('contact_name') or ''} {s.get('contact_phone') or ''}".strip()
@@ -1192,7 +1345,13 @@ def asite(call: types.CallbackQuery):
            contacts=contacts,
            last=fmt_date_display(s.get('last_service_at')),
            n=int(s.get('service_count') or 0))
-    bot.send_message(call.message.chat.id, text, reply_markup=admin_site_actions_kb(site_id, T, lang))
+    text += f"\n⏰ Напоминание: раз в {int(s.get('remind_days') or 30)} дн."
+    bot.send_message(chat_id, text, reply_markup=admin_site_actions_kb(site_id, T, lang))
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('asite:'))
+def asite(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    asite_show(call.message.chat.id, call.from_user.id, int(call.data.split(':')[1]))
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite_orders:'))
@@ -1231,32 +1390,43 @@ def aorder_open(call: types.CallbackQuery):
 def adel(call: types.CallbackQuery):
     if not require_admin_call(call): return
     oid=int(call.data.split(':')[1])
+    bot.send_message(call.message.chat.id, f"⚠️ Удалить заказ #{oid}?",
+                     reply_markup=confirm_action_kb("🗑 Да, удалить", f"adel_yes:{oid}", f"aorder:{oid}"))
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('adel_yes:'))
+def adel_yes(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    oid=int(call.data.split(':')[1])
+    o=db.get_service_order(oid)
     ok=db.delete_service_order(oid)
     bot.send_message(call.message.chat.id, "🗑 Удалено." if ok else "❌ Не удалось удалить.")
+    if o:
+        asite_show(call.message.chat.id, call.from_user.id, o['site_id'])
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('adelall:'))
 def adelall(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
     site_id=int(call.data.split(':')[1])
-    temp[uid]={'flow':'delall','site_id':site_id}
-    bot.set_state(uid, AdminDeleteAllStates.confirm_phrase, call.message.chat.id)
-    bot.send_message(call.message.chat.id, T(lang,'admin_confirm_phrase'))
+    site=db.get_site(site_id)
+    if not site:
+        safe_answer(call); return
+    n=db.count_orders_for_site(site_id)
+    bot.send_message(call.message.chat.id,
+                     f"⚠️ Удалить все заказы ({n} шт.) по участку «{site['address']}»? Сам участок останется.",
+                     reply_markup=confirm_action_kb("🗑 Да, удалить все", f"adelall_yes:{site_id}", f"asite:{site_id}"))
     safe_answer(call)
 
-@bot.message_handler(state=AdminDeleteAllStates.confirm_phrase)
-def adelall_confirm(message: types.Message):
-    if not require_admin_msg(message): return
-    uid=message.from_user.id; lang=get_lang(uid)
-    phrase=(message.text or '').strip().lower()
-    if phrase != 'да, хочу удалить':
-        bot.send_message(message.chat.id, "❌ Не подтверждено. Отмена.")
-        temp.pop(uid,None); bot.delete_state(uid, message.chat.id); show_admin_menu(message.chat.id, uid); return
-    site_id=int(temp.get(uid,{}).get('site_id',0))
+@bot.callback_query_handler(func=lambda c: c.data.startswith('adelall_yes:'))
+def adelall_yes(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id; lang=get_lang(uid)
+    site_id=int(call.data.split(':')[1])
     n=db.delete_all_orders_for_site(site_id)
-    bot.send_message(message.chat.id, T(lang,'admin_deleted_all', n=n))
-    temp.pop(uid,None); bot.delete_state(uid, message.chat.id); show_admin_menu(message.chat.id, uid)
+    bot.send_message(call.message.chat.id, T(lang,'admin_deleted_all', n=n))
+    asite_show(call.message.chat.id, uid, site_id)
+    safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite_edit:'))
 def asite_edit(call: types.CallbackQuery):
@@ -1311,19 +1481,7 @@ def asite_edit_apply(message: types.Message):
         ok=db.update_site(site_id, fields)
     temp.pop(uid,None); bot.delete_state(uid, message.chat.id)
     bot.send_message(message.chat.id, "✅ Обновлено." if ok else "❌ Не удалось обновить.")
-    # show site card
-    s=db.get_site(site_id)
-    if s:
-        contacts=(s.get('contact_phone') or '—')
-        bot.send_message(message.chat.id, T(lang,'admin_site_card',
-                                           sid=s['id'], address=s['address'],
-                                           area=f"{fmt_area(s.get('area_sotki'))} сот.",
-                                           contacts=contacts,
-                                           last=fmt_date_display(s.get('last_service_at')),
-                                           n=int(s.get('service_count') or 0)),
-                         reply_markup=admin_site_actions_kb(site_id, T, lang))
-    else:
-        show_admin_menu(message.chat.id, uid)
+    asite_show(message.chat.id, uid, site_id)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('aorder_edit:'))
 def aorder_edit(call: types.CallbackQuery):
@@ -1588,6 +1746,24 @@ def cancel(call: types.CallbackQuery):
     else:
         show_client_start(call.message.chat.id, uid)
     safe_answer(call)
+
+# ---------------- Fallback: любой текст вне диалога → меню ----------------
+# Регистрируется последним: срабатывает, только если ни один обработчик выше не подошёл.
+@bot.message_handler(func=lambda m: True, content_types=['text'])
+def fallback_text(message: types.Message):
+    uid=message.from_user.id
+    try:
+        state=bot.get_state(uid, message.chat.id)
+    except Exception:
+        state=None
+    if state:
+        # человек в диалоге, где ждём кнопку — подскажем, а не собьём
+        bot.send_message(message.chat.id, "☝️ Жду нажатия кнопки выше. Начать заново — /cancel")
+        return
+    if is_admin(uid):
+        show_admin_menu(message.chat.id, uid)
+    else:
+        show_client_start(message.chat.id, uid)
 
 # ---------------- Run ----------------
 if __name__ == '__main__':
