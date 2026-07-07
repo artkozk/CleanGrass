@@ -1651,7 +1651,7 @@ def asite_edit(call: types.CallbackQuery):
 def asite_edit_field(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
-    _, _, field, site_id = call.data.split(':')
+    _, field, site_id = call.data.split(':')
     site_id=int(site_id)
     temp[uid]={'flow':'edit_site','site_id':site_id,'field':field}
     bot.set_state(uid, AdminEditSiteStates.field, call.message.chat.id)
@@ -1700,14 +1700,16 @@ def aorder_edit(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id; lang=get_lang(uid)
     oid=int(call.data.split(':')[1])
-    bot.send_message(call.message.chat.id, "Что изменить в заказе?", reply_markup=admin_edit_order_kb(oid, T, lang))
+    o=db.get_service_order(oid)
+    wt=(o.get('work_type') if o else 'mow') or 'mow'
+    bot.send_message(call.message.chat.id, "Что изменить в заказе?", reply_markup=admin_edit_order_kb(oid, T, lang, work_type=wt))
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('aorder_edit_field:'))
 def aorder_edit_field(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id; lang=get_lang(uid)
-    _, _, field, oid = call.data.split(':')
+    _, field, oid = call.data.split(':')
     oid=int(oid)
     temp[uid]={'flow':'edit_order','order_id':oid,'field':field}
     bot.set_state(uid, AdminEditServiceOrderStates.field, call.message.chat.id)

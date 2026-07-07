@@ -287,12 +287,18 @@ def admin_edit_site_kb(site_id:int, t, lang) -> InlineKeyboardMarkup:
     kb.add(InlineKeyboardButton(t(lang,'back'), callback_data=f"asite:{site_id}"))
     return kb
 
-def admin_edit_order_kb(order_id:int, t, lang) -> InlineKeyboardMarkup:
+def admin_edit_order_kb(order_id:int, t, lang, work_type:str='mow') -> InlineKeyboardMarkup:
     kb=InlineKeyboardMarkup(row_width=2)
+    if (work_type or 'mow') == 'other':
+        # другая работа: сумма вместо соток/тарифа
+        kb.add(InlineKeyboardButton("💰 Сумма", callback_data=f"aorder_edit_field:amount:{order_id}"))
+    else:
+        # покос: площадь и тариф
+        kb.add(
+            InlineKeyboardButton("📏 Сотки", callback_data=f"aorder_edit_field:area:{order_id}"),
+            InlineKeyboardButton("💵 Тариф", callback_data=f"aorder_edit_field:tariff:{order_id}"),
+        )
     kb.add(
-        InlineKeyboardButton("📏 Сотки", callback_data=f"aorder_edit_field:area:{order_id}"),
-        InlineKeyboardButton("💵 Тариф", callback_data=f"aorder_edit_field:tariff:{order_id}"),
-        InlineKeyboardButton("💰 Сумма", callback_data=f"aorder_edit_field:amount:{order_id}"),
         InlineKeyboardButton("💸 Заплатили", callback_data=f"aorder_edit_field:paid:{order_id}"),
         InlineKeyboardButton("🤝 Помощнику", callback_data=f"aorder_edit_field:helper:{order_id}"),
         InlineKeyboardButton("📅 Дата", callback_data=f"aorder_edit_field:date:{order_id}"),
