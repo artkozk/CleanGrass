@@ -593,13 +593,18 @@ def areq_done(call: types.CallbackQuery):
 def aneworder(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
+    # первый вопрос — что делали (покос/другая работа), участок выбираем после
     temp[uid]={'flow':'admin_order_pick'}
-    bot.set_state(uid, AdminOrderStates.site_search, call.message.chat.id)
+    bot.set_state(uid, AdminOrderStates.work_type, call.message.chat.id)
+    bot.send_message(call.message.chat.id, "Что делали?", reply_markup=work_type_kb())
+    safe_answer(call)
+
+def _show_site_pick(uid:int, chat_id:int):
+    bot.set_state(uid, AdminOrderStates.site_search, chat_id)
     sites=db.list_sites_recent(limit=10)
     text="Выбери участок кнопкой — или просто напиши часть адреса, я найду:" if sites else \
          "Участков пока нет — создай первый:"
-    bot.send_message(call.message.chat.id, text, reply_markup=site_pick_kb(sites))
-    safe_answer(call)
+    bot.send_message(chat_id, text, reply_markup=site_pick_kb(sites))
 
 @bot.message_handler(state=AdminOrderStates.site_search)
 def a_site_search(message: types.Message):
@@ -644,17 +649,30 @@ def a_new_site_address(message: types.Message):
         bot.send_message(message.chat.id, T(lang,'err_value')); return
     temp.setdefault(uid,{})['new_site_address']=addr
     bot.set_state(uid, AdminOrderStates.new_site_area, message.chat.id)
-    bot.send_message(message.chat.id, T(lang,'admin_new_site_area'), reply_markup=step_nav_kb(back=False))
+    bot.send_message(message.chat.id, "📏 Площадь участка (сотки). Не знаешь — жми «Пропустить»:", reply_markup=skip_kb("askip_sarea"))
+
+@bot.callback_query_handler(func=lambda c: c.data=='askip_sarea', state=AdminOrderStates.new_site_area)
+def a_new_site_area_skip(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id
+    temp.setdefault(uid,{})['new_site_area']=None
+    bot.set_state(uid, AdminOrderStates.new_site_name, call.message.chat.id)
+    bot.send_message(call.message.chat.id, "👤 Имя клиента (для напоминаний):", reply_markup=skip_kb("askip_sname"))
+    safe_answer(call)
 
 @bot.message_handler(state=AdminOrderStates.new_site_area)
 def a_new_site_area(message: types.Message):
     if not require_admin_msg(message): return
     uid=message.from_user.id; lang=get_lang(uid)
-    try:
-        area=float((message.text or '').strip().replace(',','.'))
-        if area<=0: raise ValueError
-    except Exception:
-        bot.send_message(message.chat.id, T(lang,'err_value')); return
+    txt=(message.text or '').strip()
+    if txt in ('-','—','?','не знаю','незнаю'):
+        area=None
+    else:
+        try:
+            area=float(txt.replace(',','.'))
+            if area<=0: raise ValueError
+        except Exception:
+            bot.send_message(message.chat.id, "❌ Не понял. Введи число (например 2.5) — или жми «Пропустить»:", reply_markup=skip_kb("askip_sarea")); return
     temp.setdefault(uid,{})['new_site_area']=area
     bot.set_state(uid, AdminOrderStates.new_site_name, message.chat.id)
     bot.send_message(message.chat.id, "👤 Имя клиента (для напоминаний):", reply_markup=skip_kb("askip_sname"))
@@ -715,8 +733,18 @@ def _start_admin_order(uid:int, chat_id:int, site_id:int, req_id:Optional[int]=N
     site=db.get_site(site_id)
     if not site:
         bot.send_message(chat_id, "❌ Участок не найден."); return
+    # тип работы мог быть выбран ещё до участка (флоу «Создать заказ»)
+    prev=temp.get(uid) or {}
+    wt=prev.get('work_type') if prev.get('flow')=='admin_order_pick' else None
     temp[uid]={'flow':'admin_order','site_id':site_id,'req_id':req_id,'photos':[],'zone_sel':[]}
-    _ask_work_type(uid, chat_id)
+    if wt:
+        temp[uid]['work_type']=wt
+        if wt=='other':
+            _ask_work_name(uid, chat_id)
+        else:
+            _show_zones_screen(uid, chat_id)
+    else:
+        _ask_work_type(uid, chat_id)
 
 def _ask_work_type(uid:int, chat_id:int):
     site=db.get_site(int(temp.setdefault(uid,{}).get('site_id',0))) or {}
@@ -730,7 +758,10 @@ def a_work_type(call: types.CallbackQuery):
     wt=call.data.split(':')[1]
     ctx=temp.setdefault(uid,{})
     ctx['work_type']=wt
-    if wt=='other':
+    if not ctx.get('site_id'):
+        # тип выбран до участка — теперь выбираем участок
+        _show_site_pick(uid, call.message.chat.id)
+    elif wt=='other':
         _ask_work_name(uid, call.message.chat.id)
     else:
         _show_zones_screen(uid, call.message.chat.id)
