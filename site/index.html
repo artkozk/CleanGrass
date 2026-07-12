@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Покос48 — покос травы в Кузьминских Отвержках и соседних сёлах</title>
+<meta name="description" content="Покос травы в Кузьминских Отвержках, Липецком районе и соседних сёлах. Косим 4-й год. Бесплатный замер, цена до начала работ, фотоотчёт до и после.">
+<meta property="og:title" content="Покос48 — покос травы в Кузьминских Отвержках">
+<meta property="og:description" content="От 450 ₽/сотка, регулярный — от 400 ₽. Бесплатный замер, цена до начала работ, фотоотчёт до и после. Приезжаем за 1–2 дня.">
+<meta property="og:url" content="https://pokos48.ru/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta name="theme-color" content="#2F601C">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+<link rel="canonical" href="https://pokos48.ru/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Podkova:wght@500;600;700&family=PT+Sans:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fon: #F4F7EC;
+    --ink: #22301B;
+    --ink-soft: #55654A;
+    --grass: #2F601C;
+    --grass-deep: #24491A;
+    --grass-bright: #5FA134;
+    --grass-pale: #E2EDD0;
+    --sun: #F2B32C;
+    --paper: #FDF3C7;
+    --paper-edge: #E3D294;
+    --display: 'Podkova', 'PT Sans', serif;
+    --body: 'PT Sans', system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body { overflow-x: clip; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  body {
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink);
+    background: var(--fon);
+  }
+  .wrap { max-width: 700px; margin: 0 auto; padding: 0 20px; }
+  a { color: var(--grass); }
+  :focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; border-radius: 4px; }
+  section[id] { scroll-margin-top: 16px; }
+
+  .band { padding: 48px 0; }
+  .band-white { background: #fff; }
+  .band-green { background: var(--grass); color: #E9F1DC; }
+  .band-ink { background: var(--ink); color: #C8D3BC; }
+
+  h1, h2 { font-family: var(--display); text-wrap: balance; }
+  h2 { font-weight: 600; font-size: clamp(24px, 5vw, 30px); margin-bottom: 20px; }
+
+  .topbar { padding: 16px 0; }
+  .topbar .wrap { display: flex; align-items: center; gap: 10px; }
+  .logo { font-family: var(--display); font-weight: 700; font-size: 22px; color: var(--grass); text-decoration: none; letter-spacing: 0.5px; }
+  .logo span { color: var(--ink); }
+  .topbar a.phone { margin-left: auto; font-weight: 700; text-decoration: none; color: var(--ink); font-size: 15px; }
+
+  .hero { padding: 26px 0 0; }
+  .eyebrow {
+    display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--grass); background: var(--grass-pale);
+    padding: 4px 12px; border-radius: 999px; margin-bottom: 18px;
+  }
+  h1 { font-weight: 700; font-size: clamp(30px, 7vw, 44px); line-height: 1.12; margin-bottom: 14px; }
+  h1 em { font-style: normal; color: var(--grass); }
+  .hero p.lead { font-size: 19px; color: var(--ink-soft); max-width: 32em; margin-bottom: 24px; }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: var(--body); font-weight: 700; font-size: 17px; text-decoration: none;
+    padding: 14px 26px; border-radius: 10px; border: none; cursor: pointer;
+    transition: transform 0.12s ease, background-color 0.12s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-green { background: var(--grass); color: #fff; }
+  .btn-green:hover { background: var(--grass-deep); }
+  .btn-line { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+  .btn-line:hover { background: rgba(34,48,27,0.06); }
+  .btn-sun { background: var(--sun); color: #4A3405; }
+  .btn-sun:hover { background: #E3A517; }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 22px; padding-bottom: 26px; }
+  .facts li { list-style: none; font-size: 15px; font-weight: 700; color: var(--ink-soft); }
+  .facts li::before { content: "✓ "; color: var(--grass-bright); }
+
+  .grass-edge {
+    display: block; width: 100%; height: 44px; margin-bottom: -1px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><path fill="%238FBB6C" d="M0 48 L6 22 L12 48 L18 14 L24 48 L30 26 L36 48 L42 18 L48 48 L54 28 L60 48 L66 16 L72 48 L78 20 L84 48 L90 24 L96 48 L102 30 L108 48 L114 18 L120 48 L126 24 L132 48 L138 16 L144 48 L150 26 L156 48 L162 20 L168 48 L174 28 L180 48 L186 14 L192 48 L198 22 L204 48 L210 26 L216 48 L222 18 L228 48 L234 24 L240 48 Z"/><path fill="%232F601C" d="M0 48 L4 12 L8 48 L12 26 L16 48 L20 8 L24 48 L28 20 L32 48 L36 30 L40 48 L44 6 L48 48 L52 16 L56 48 L60 24 L64 48 L68 10 L72 48 L76 28 L80 48 L84 14 L88 48 L92 22 L96 48 L100 4 L104 48 L108 18 L112 48 L116 26 L120 48 L124 10 L128 48 L132 30 L136 48 L140 8 L144 48 L148 20 L152 48 L156 14 L160 48 L164 24 L168 48 L172 6 L176 48 L180 28 L184 48 L188 16 L192 48 L196 22 L200 48 L204 10 L208 48 L212 26 L216 48 L220 12 L224 48 L228 18 L232 48 L236 8 L240 48 Z"/></svg>');
+    background-repeat: repeat-x;
+    background-position: bottom left;
+    background-size: 220px 44px;
+  }
+
+  .zamer-band .wrap { display: flex; gap: 20px; align-items: flex-start; }
+  .zamer-band svg.ruler { flex: 0 0 auto; width: 44px; height: 44px; margin-top: 4px; }
+  .zamer-band h2 { color: #fff; margin-bottom: 8px; }
+  .zamer-band p { font-size: 17px; max-width: 36em; }
+  .zamer-band strong { color: #fff; }
+  @media (max-width: 480px) { .zamer-band .wrap { flex-direction: column; gap: 10px; } }
+
+  .price-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+  .price-card { background: var(--fon); border: 2px solid var(--grass-pale); border-radius: 14px; padding: 20px 18px 16px; position: relative; display: flex; flex-direction: column; gap: 4px; justify-content: center; text-align: center; align-items: center; }
+  .price-card.featured { border-color: var(--grass-bright); background: #F7FBEF; }
+  .price-card .badge {
+    position: absolute; top: -12px; left: 16px; background: var(--sun); color: #4A3405;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .price-card h3 { font-family: var(--body); font-size: 15px; font-weight: 700; color: var(--ink-soft); }
+  .price-card .num { font-family: var(--display); font-weight: 700; font-size: 26px; color: var(--ink); white-space: nowrap; }
+  .price-card .num span { font-family: var(--body); font-weight: 400; font-size: 14px; color: var(--ink-soft); }
+  .price-card p.note { font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
+  .price-foot { font-size: 15px; color: var(--ink-soft); margin-top: 18px; text-align: center; }
+  .price-foot a { font-weight: 700; }
+
+  .beforeafter { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ba-slot { border-radius: 14px; aspect-ratio: 4 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-weight: 700; font-size: 15px; }
+  .ba-before { background: #EFE8D2; color: #6B5A26; }
+  .ba-after { background: var(--grass-pale); color: var(--grass); }
+  .ba-slot small { font-weight: 400; font-size: 13px; opacity: 0.75; }
+  .photo-note { font-size: 14px; color: var(--ink-soft); margin-top: 12px; max-width: 38em; }
+
+  .steps { list-style: none; counter-reset: step; display: grid; gap: 12px; }
+  .steps li { counter-increment: step; display: flex; gap: 14px; align-items: flex-start; background: #fff; border: 2px solid var(--grass-pale); border-radius: 14px; padding: 14px 16px; }
+  .band-white .steps li { background: var(--fon); }
+  .steps li::before {
+    content: counter(step); flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
+    background: var(--grass-pale); color: var(--grass); font-family: var(--display);
+    font-weight: 700; font-size: 18px; display: flex; align-items: center; justify-content: center;
+  }
+  .steps b { display: block; }
+  .steps p { font-size: 15px; color: var(--ink-soft); }
+
+  .extra p { color: var(--ink-soft); font-size: 17px; max-width: 36em; }
+  .extra p + p { margin-top: 12px; }
+  .extra ul { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  .extra ul li { background: #fff; border: 2px solid var(--grass-pale); color: var(--grass); font-weight: 700; font-size: 14px; padding: 7px 15px; border-radius: 999px; }
+  .band-white .extra ul li { background: var(--fon); }
+
+  .zone-pills { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+  .zone-pills li { background: var(--fon); border: 2px solid var(--grass-pale); font-weight: 700; font-size: 15px; padding: 7px 16px; border-radius: 999px; }
+  .zone-note { font-size: 15px; color: var(--ink-soft); margin-top: 14px; }
+
+  .flyer-zone { padding: 54px 0 64px; }
+  .flyer {
+    background: var(--paper); border: 1px solid var(--paper-edge); border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    max-width: 560px; margin: 0 auto; padding: 30px 26px 0;
+    box-shadow: 0 12px 26px rgba(34,48,27,0.14);
+    position: relative;
+  }
+  @media (min-width: 640px) { .flyer { transform: rotate(-0.6deg); } }
+  .flyer::before {
+    content: ""; position: absolute; top: -11px; left: 50%; transform: translateX(-50%) rotate(1.5deg);
+    width: 92px; height: 22px; background: rgba(255,255,255,0.55); border: 1px solid rgba(0,0,0,0.06);
+  }
+  .flyer h2 { text-align: center; font-size: clamp(24px, 5.5vw, 30px); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 4px; }
+  .flyer .flyer-sub { text-align: center; color: #5C4E1E; font-size: 16px; margin-bottom: 20px; }
+
+  .form-grid { display: grid; gap: 12px; }
+  .form-grid label { font-weight: 700; font-size: 14px; display: grid; gap: 5px; color: #4A3F17; }
+  .form-grid input[type="text"], .form-grid input[type="tel"] {
+    font-family: var(--body); font-size: 17px; padding: 12px 14px; border-radius: 8px;
+    border: 2px solid var(--paper-edge); background: #FFFDF4; color: var(--ink); width: 100%;
+  }
+  .form-grid input:focus { border-color: var(--grass-bright); outline: none; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; font-weight: 400; color: #4A3F17; }
+  .check input { width: 22px; height: 22px; accent-color: var(--grass); flex: 0 0 auto; margin-top: 1px; }
+  .form-grid .btn-green { width: 100%; margin-top: 4px; font-size: 18px; padding: 15px; }
+  .form-msg { font-size: 15px; text-align: center; padding: 4px 0; display: none; }
+  .form-msg.ok { display: block; color: var(--grass); font-weight: 700; }
+  .form-msg.fail { display: block; color: #8A3B12; }
+
+  .alt-contacts { text-align: center; font-size: 15px; color: #5C4E1E; margin: 16px 0 22px; }
+  .alt-contacts a { color: var(--grass); font-weight: 700; }
+
+  .tear-strips { display: flex; margin: 0 -26px; overflow: hidden; border-top: 2px dashed #C9B978; }
+  .tear-strip {
+    flex: 1; border-left: 1px dashed #C9B978; border-bottom: 1px solid var(--paper-edge);
+    padding: 14px 2px; text-align: center; font-size: 12px; font-weight: 700; color: #5C4E1E;
+    writing-mode: vertical-rl; min-height: 132px; letter-spacing: 0.05em;
+    background: var(--paper);
+  }
+  .tear-strip:first-child { border-left: none; }
+  .tear-strip.torn {
+    background: var(--fon); color: transparent; border-bottom: none;
+    writing-mode: horizontal-tb; position: relative; padding: 0;
+  }
+  .tear-strip.torn::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 22px;
+    background: var(--paper);
+    clip-path: polygon(0 0, 100% 0, 100% 35%, 78% 100%, 58% 40%, 36% 88%, 16% 45%, 0 75%);
+  }
+
+  footer { padding: 26px 0 34px; text-align: center; font-size: 14px; }
+  footer .logo { color: #A9C489; }
+  footer .logo span { color: #E9F1DC; }
+  footer p { margin-top: 6px; }
+
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .band { padding: 38px 0; }
+    .beforeafter { grid-template-columns: 1fr; }
+    .ba-slot { aspect-ratio: 16 / 9; }
+    .tear-strip:nth-child(n+8) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="logo" href="#">Покос<span>48</span></a>
+    <a class="phone" href="tel:+79508058686">+7 950 805-86-86</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow">Кузьминские Отвержки и соседние сёла</span>
+      <h1>Трава выросла — <em>приедем и скосим</em></h1>
+      <p class="lead">Косим 4-й год: участки, дворы, палисадники и всё, что заросло. Свой инструмент. Цену называем до начала работ — и она не меняется.</p>
+      <div class="cta-row">
+        <a class="btn btn-green" href="#zayavka">Оставить заявку</a>
+        <a class="btn btn-line" href="tel:+79508058686">Позвонить</a>
+        <a class="btn btn-line" href="https://max.ru/id482601120989_bot">Написать в MAX</a>
+      </div>
+      <ul class="facts">
+        <li>4-й год косим</li>
+        <li>приезжаем за 1–2 дня</li>
+        <li>фотоотчёт до и после</li>
+      </ul>
+    </div>
+    <div class="grass-edge" aria-hidden="true"></div>
+  </section>
+
+  <section class="band band-green zamer-band">
+    <div class="wrap">
+      <svg class="ruler" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+        <rect x="4" y="16" width="36" height="12" rx="2" stroke="#E9F1DC" stroke-width="2.5"/>
+        <path d="M11 16v6M18 16v4M25 16v6M32 16v4" stroke="#E9F1DC" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <h2>Бесплатный замер — наше правило</h2>
+        <p>Приезжаем, сами меряем участок и называем точную цену <strong>до начала работ</strong>. Цена зависит от высоты травы, рельефа и препятствий. Не подойдёт цена — вы ничего не должны.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-white" id="ceny">
+    <div class="wrap">
+      <h2>Сколько стоит</h2>
+      <div class="price-cards">
+        <div class="price-card">
+          <h3>Разовый покос</h3>
+          <div class="num">от 450 ₽ <span>/ сотка</span></div>
+        </div>
+        <div class="price-card featured">
+          <span class="badge">Выгодно</span>
+          <h3>Регулярный покос</h3>
+          <div class="num">от 400 ₽ <span>/ сотка</span></div>
+          <p class="note">Раз в 2 недели — участок всегда в порядке.</p>
+        </div>
+        <div class="price-card">
+          <h3>Заросший участок</h3>
+          <div class="num">по замеру</div>
+          <p class="note">Бурьян, трава по пояс — посмотрим и назовём цену честно.</p>
+        </div>
+      </div>
+      <p class="price-foot">Точная цена — после бесплатного замера. <a href="#zayavka">Оставьте заявку</a> — приедем и посчитаем.</p>
+    </div>
+  </section>
+
+  <section class="band" id="foto">
+    <div class="wrap">
+      <h2>До и после</h2>
+      <div class="beforeafter">
+        <div class="ba-slot ba-before">заросло<small>фото «до» — скоро здесь</small></div>
+        <div class="ba-slot ba-after">подстрижено<small>фото «после» — скоро здесь</small></div>
+      </div>
+      <p class="photo-note">Дворы клиентов не публикуем из уважения к соседям — работу показываем на нашем собственном участке.</p>
+    </div>
+  </section>
+
+  <section class="band band-white" id="kak">
+    <div class="wrap">
+      <h2>Как всё проходит</h2>
+      <ol class="steps">
+        <li><div><b>Оставляете заявку</b><p>Через форму ниже, по телефону, в Telegram или MAX — как удобнее.</p></div></li>
+        <li><div><b>Приезжаем на замер</b><p>Смотрим участок, меряем, называем точную цену. Бесплатно и ни к чему не обязывает.</p></div></li>
+        <li><div><b>Косим</b><p>В назначенный день приезжаем и косим: ровно, без пропусков, вдоль заборов и по углам.</p></div></li>
+        <li><div><b>Фотоотчёт и оплата</b><p>Присылаем фото до и после. Платите после работы, когда всё проверили.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band" id="eshe">
+    <div class="wrap extra">
+      <h2>Нужно что-то ещё на участке?</h2>
+      <p>Мы не только про траву — руки на месте. Земляные работы, расчистка, что-то перевезти, вскопать или спилить — берёмся почти за всё, что нужно по хозяйству.</p>
+      <p>Опишите задачу — приедем, посмотрим и назовём цену на месте.</p>
+    </div>
+  </section>
+
+  <section class="band band-white" id="kuda">
+    <div class="wrap">
+      <h2>Куда выезжаем</h2>
+      <ul class="zone-pills">
+        <li>Кузьминские Отвержки</li>
+        <li>Тюшевка</li>
+        <li>Новая Деревня</li>
+        <li>Студёные Выселки</li>
+        <li>Копцевы Хутора</li>
+        <li>Малашевка</li>
+        <li>Давыдовка</li>
+        <li>Дарёновка</li>
+        <li>СНТ и дачи рядом</li>
+      </ul>
+      <p class="zone-note">Работаем в радиусе ~15 км от Кузьминских Отвержек. Вашего села нет в списке? Спросите — скорее всего, доедем.</p>
+    </div>
+  </section>
+
+  <section class="flyer-zone" id="zayavka">
+    <div class="wrap">
+      <div class="flyer">
+        <h2>Покошу траву</h2>
+        <p class="flyer-sub">Оставьте заявку — перезвоним и договоримся о замере.</p>
+        <form class="form-grid" id="orderForm" novalidate>
+          <label>Как вас зовут
+            <input type="text" name="name" autocomplete="name" required placeholder="Иван">
+          </label>
+          <label>Телефон
+            <input type="tel" name="phone" autocomplete="tel" required inputmode="tel" placeholder="+7 950 805-86-86">
+          </label>
+          <label>Адрес участка
+            <input type="text" name="address" required placeholder="Кузьминские Отвержки, ул. Садовая, 5">
+          </label>
+          <label class="check">
+            <input type="checkbox" name="regular">
+            <span>Хочу косить регулярно (раз в 2 недели) — так дешевле, и участок не зарастает</span>
+          </label>
+          <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute; left:-9999px; height:0; width:0; border:0; padding:0;">
+          <button class="btn btn-green" type="submit">Отправить заявку</button>
+          <p class="form-msg" id="formMsg" role="status"></p>
+        </form>
+        <p class="alt-contacts">Или напрямую: <a href="tel:+79508058686">+7 950 805-86-86</a> · <a href="https://t.me/pokos48">Telegram</a> · <a href="https://max.ru/id482601120989_bot">MAX</a></p>
+        <div class="tear-strips" aria-hidden="true">
+          <div class="tear-strip">8-950-805-86-86</div>
+          <div class="tear-strip torn">покос 8-900</div>
+          <div class="tear-strip">8-950-805-86-86</div>
+          <div class="tear-strip">8-950-805-86-86</div>
+          <div class="tear-strip">8-950-805-86-86</div>
+          <div class="tear-strip torn">покос 8-900</div>
+          <div class="tear-strip">8-950-805-86-86</div>
+          <div class="tear-strip">8-950-805-86-86</div>
+          <div class="tear-strip">8-950-805-86-86</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="band-ink">
+  <div class="wrap">
+    <a class="logo" href="#">Покос<span>48</span></a>
+    <p>Кузьминские Отвержки, Липецкий район · косим с 2022 года</p>
+  </div>
+</footer>
+
+<script>
+  const form = document.getElementById('orderForm');
+  const msg = document.getElementById('formMsg');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form).entries());
+    data.regular = form.regular.checked;
+    if (!data.name.trim() || !data.phone.trim() || !data.address.trim()) {
+      msg.className = 'form-msg fail';
+      msg.textContent = 'Заполните имя, телефон и адрес — иначе не сможем перезвонить.';
+      return;
+    }
+    msg.className = 'form-msg';
+    try {
+      const r = await fetch('/api/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!r.ok) throw new Error();
+      form.reset();
+      msg.className = 'form-msg ok';
+      msg.textContent = 'Заявка отправлена! Перезвоним в ближайшее время.';
+    } catch {
+      msg.className = 'form-msg fail';
+      msg.textContent = 'Не получилось отправить. Позвоните: +7 950 805-86-86.';
+    }
+  });
+</script>
+</body>
+</html>

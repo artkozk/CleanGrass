@@ -1998,6 +1998,11 @@ def cancel(call: types.CallbackQuery):
         show_client_start(call.message.chat.id, uid)
     safe_answer(call)
 
+# ---------------- Заявки с сайта и из MAX ----------------
+# Обязательно ДО fallback-обработчика: иначе команды /subs и /zayavki не дойдут.
+import requests_admin
+requests_admin.register(bot, is_admin)
+
 # ---------------- Fallback: любой текст вне диалога → меню ----------------
 # Регистрируется последним: срабатывает, только если ни один обработчик выше не подошёл.
 @bot.message_handler(func=lambda m: True, content_types=['text'])

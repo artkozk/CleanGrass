@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Приём заявок с сайта pokos48.ru.
+
+POST /api/request  {name, phone, address, regular}
+Сохраняет заявку в grass_orders.db (таблица site_requests) и шлёт
+уведомление всем админам бота в Telegram. Слушает только 127.0.0.1:8091 —
+наружу проксируется через nginx (location /api/).
+"""
+import json
+import os
+import sqlite3
+import sys
+import time
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE, 'grass_orders.db')
+HOST, PORT = '127.0.0.1', 8091
+MAX_BODY = 4096
+RATE_LIMIT = 5          # заявок с одного IP
+RATE_WINDOW = 3600      # за час
+
+_rate: dict = {}
+
+
+def load_env():
+    env = {}
+    try:
+        with open(os.path.join(BASE, '.env'), encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, v = line.split('=', 1)
+                    env[k.strip()] = v.strip()
+    except FileNotFoundError:
+        pass
+    return env
+
+
+BOT_TOKEN = load_env().get('BOT_TOKEN', '')
+
+
+def ensure_table():
+    db = sqlite3.connect(DB_PATH)
+    db.execute('''CREATE TABLE IF NOT EXISTS site_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        address TEXT NOT NULL,
+        regular INTEGER NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'site',
+        status TEXT NOT NULL DEFAULT 'new',
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )''')
+    db.commit()
+    db.close()
+
+
+def admin_ids():
+    try:
+        db = sqlite3.connect(DB_PATH)
+        ids = [r[0] for r in db.execute('SELECT tg_id FROM admins')]
+        db.close()
+        return ids
+    except Exception as e:
+        print(f'admin_ids error: {e}', file=sys.stderr)
+        return []
+
+
+def esc(s):
+    return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def notify_admins(req_id, name, phone, address, regular):
+    if not BOT_TOKEN:
+        print('BOT_TOKEN is empty, skip notify', file=sys.stderr)
+        return
+    kind = 'Регулярный (раз в 2 недели)' if regular else 'Разовый'
+    text = (f'🌐 Заявка с сайта #{req_id}\n'
+            f'🧾 {kind}\n'
+            f'👤 {esc(name)}\n'
+            f'☎️ <code>{esc(phone)}</code>\n'
+            f'📍 {esc(address)}')
+    for chat_id in admin_ids():
+        data = urllib.parse.urlencode({'chat_id': chat_id, 'text': text,
+                                       'parse_mode': 'HTML'}).encode()
+        url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+        try:
+            with urllib.request.urlopen(url, data=data, timeout=15) as resp:
+                resp.read()
+        except Exception as e:
+            print(f'notify {chat_id} failed: {e}', file=sys.stderr)
+
+
+def rate_ok(ip):
+    now = time.time()
+    hits = [t for t in _rate.get(ip, []) if now - t < RATE_WINDOW]
+    if len(hits) >= RATE_LIMIT:
+        _rate[ip] = hits
+        return False
+    hits.append(now)
+    _rate[ip] = hits
+    return True
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _reply(self, code, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode()
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        if self.path.rstrip('/') != '/api/request':
+            return self._reply(404, {'ok': False, 'error': 'not found'})
+        ip = self.headers.get('X-Real-IP') or self.client_address[0]
+        if not rate_ok(ip):
+            return self._reply(429, {'ok': False, 'error': 'too many requests'})
+        length = int(self.headers.get('Content-Length') or 0)
+        if not 0 < length <= MAX_BODY:
+            return self._reply(400, {'ok': False, 'error': 'bad length'})
+        try:
+            data = json.loads(self.rfile.read(length).decode('utf-8'))
+        except Exception:
+            return self._reply(400, {'ok': False, 'error': 'bad json'})
+        name = str(data.get('name', '')).strip()[:100]
+        phone = str(data.get('phone', '')).strip()[:30]
+        address = str(data.get('address', '')).strip()[:200]
+        regular = 1 if data.get('regular') else 0
+        # honeypot: скрытое поле, люди его не видят и не заполняют
+        if str(data.get('website', '')).strip():
+            print(f'honeypot hit from {ip}, dropped', file=sys.stderr)
+            return self._reply(200, {'ok': True, 'id': 0})
+        if not name or not phone or not address:
+            return self._reply(400, {'ok': False, 'error': 'missing fields'})
+        if sum(c.isdigit() for c in phone) < 6:
+            return self._reply(400, {'ok': False, 'error': 'bad phone'})
+        digits = ''.join(c for c in phone if c.isdigit())
+        db = sqlite3.connect(DB_PATH)
+        recent = db.execute("SELECT id, phone FROM site_requests "
+                            "WHERE created_at > datetime('now', 'localtime', '-30 minutes')").fetchall()
+        for rid, rphone in recent:
+            if ''.join(c for c in str(rphone) if c.isdigit()) == digits:
+                db.close()
+                print(f'duplicate from {ip} (same phone as #{rid}), skipped')
+                return self._reply(200, {'ok': True, 'id': rid})
+        cur = db.execute(
+            'INSERT INTO site_requests (name, phone, address, regular) VALUES (?, ?, ?, ?)',
+            (name, phone, address, regular))
+        req_id = cur.lastrowid
+        db.commit()
+        db.close()
+        print(f'request #{req_id} from {ip}: {name}, {phone}, {address}, regular={regular}')
+        notify_admins(req_id, name, phone, address, regular)
+        self._reply(200, {'ok': True, 'id': req_id})
+
+    def log_message(self, fmt, *args):
+        pass
+
+
+if __name__ == '__main__':
+    ensure_table()
+    print(f'site_api listening on {HOST}:{PORT}, db={DB_PATH}')
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
