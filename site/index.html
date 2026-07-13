@@ -36,8 +36,6 @@
     --ba-before-bg: #EFE8D2;
     --ba-before-ink: #6B5A26;
     --fail: #8A3B12;
-    --cut-start: 99px;
-    --cut-end: 219px;
     --display: 'Podkova', 'PT Sans', serif;
     --body: 'PT Sans', system-ui, sans-serif;
   }
@@ -89,7 +87,7 @@
   .logo span { color: var(--ink); }
   .topbar a.phone { margin-left: auto; font-weight: 700; text-decoration: none; color: var(--ink); font-size: 15px; }
 
-  .hero { padding: 26px 0 0; position: relative; overflow: hidden; }
+  .hero { padding: 26px 0 44px; position: relative; overflow: hidden; }
   .hero .wrap { padding-bottom: 58px; }
 
   .mower {
@@ -119,24 +117,32 @@
   @media (max-width: 480px) {
     .mower { width: 64px; height: 64px; bottom: 0; }
     .hero .wrap { padding-bottom: 46px; }
-    :root { --cut-start: 82px; --cut-end: 202px; }
   }
 
-  .grass-stubble {
-    position: absolute; left: 0; right: 0; bottom: -1px; height: 44px; z-index: 0;
+  .gb-stub {
+    width: calc(15vw + 18px);
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><rect x="0" y="45" width="240" height="3" fill="%232F601C"/><path fill="%238FBB6C" d="M0 48 L4 38 L8 48 L12 40 L16 48 L20 36 L24 48 L28 41 L32 48 L36 39 L40 48 L44 37 L48 48 L52 42 L56 48 L60 38 L64 48 L68 40 L72 48 L76 37 L80 48 L84 39 L88 48 L92 41 L96 48 L100 38 L104 48 L108 36 L112 48 L116 40 L120 48 L124 42 L128 48 L132 37 L136 48 L140 39 L144 48 L148 38 L152 48 L156 40 L160 48 L164 36 L168 48 L172 41 L176 48 L180 39 L184 48 L188 38 L192 48 L196 40 L200 48 L204 37 L208 48 L212 41 L216 48 L220 39 L224 48 L228 38 L232 48 L236 40 L240 48 Z"/><path fill="%232F601C" d="M0 48 L3 43 L6 48 L9 41 L12 48 L15 44 L18 48 L21 42 L24 48 L27 45 L30 48 L33 41 L36 48 L39 43 L42 48 L45 44 L48 48 L51 42 L54 48 L57 45 L60 48 L63 43 L66 48 L69 41 L72 48 L75 44 L78 48 L81 42 L84 48 L87 43 L90 48 L93 45 L96 48 L99 41 L102 48 L105 44 L108 48 L111 42 L114 48 L117 43 L120 48 L123 41 L126 48 L129 45 L132 48 L135 42 L138 48 L141 44 L144 48 L147 43 L150 48 L153 41 L156 48 L159 44 L162 48 L165 42 L168 48 L171 45 L174 48 L177 43 L180 48 L183 41 L186 48 L189 44 L192 48 L195 42 L198 48 L201 43 L204 48 L207 45 L210 48 L213 41 L216 48 L219 44 L222 48 L225 42 L228 48 L231 43 L234 48 L237 41 L240 48 Z"/></svg>');
     background-repeat: repeat-x;
     background-position: bottom left;
     background-size: 220px 44px;
   }
-  .grass-edge {
-    position: relative; z-index: 1;
-    margin-left: -120px; width: calc(100% + 120px);
-    animation: grass-reveal 34s linear infinite;
+  .gb-mid {
+    width: calc(25vw + 30px);
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><path fill="%238FBB6C" d="M0 48 L4 25 L8 48 L12 23 L16 48 L20 28 L24 48 L28 24 L32 48 L36 30 L40 48 L44 23 L48 48 L52 26 L56 48 L60 29 L64 48 L68 24 L72 48 L76 30 L80 48 L84 25 L88 48 L92 23 L96 48 L100 28 L104 48 L108 24 L112 48 L116 26 L120 48 L124 30 L128 48 L132 23 L136 48 L140 28 L144 48 L148 24 L152 48 L156 25 L160 48 L164 29 L168 48 L172 23 L176 48 L180 30 L184 48 L188 24 L192 48 L196 26 L200 48 L204 23 L208 48 L212 29 L216 48 L220 25 L224 48 L228 24 L232 48 L236 28 L240 48 Z"/><path fill="%232F601C" d="M0 48 L3 24 L6 48 L9 20 L12 48 L15 26 L18 48 L21 21 L24 48 L27 28 L30 48 L33 20 L36 48 L39 25 L42 48 L45 27 L48 48 L51 21 L54 48 L57 28 L60 48 L63 24 L66 48 L69 20 L72 48 L75 26 L78 48 L81 22 L84 48 L87 25 L90 48 L93 28 L96 48 L99 20 L102 48 L105 26 L108 48 L111 21 L114 48 L117 24 L120 48 L123 27 L126 48 L129 20 L132 48 L135 28 L138 48 L141 21 L144 48 L147 25 L150 48 L153 20 L156 48 L159 26 L162 48 L165 24 L168 48 L171 21 L174 48 L177 28 L180 48 L183 20 L186 48 L189 25 L192 48 L195 27 L198 48 L201 21 L204 48 L207 24 L210 48 L213 20 L216 48 L219 28 L222 48 L225 21 L228 48 L231 26 L234 48 L237 20 L240 48 Z"/></svg>');
   }
-  @keyframes grass-reveal {
-    from { clip-path: inset(0 0 0 var(--cut-start)); }
-    to { clip-path: inset(0 0 0 calc(100vw + var(--cut-end))); }
+  .gb-low {
+    width: calc(20vw + 24px);
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><path fill="%238FBB6C" d="M0 48 L4 30 L8 48 L12 28 L16 48 L20 32 L24 48 L28 29 L32 48 L36 34 L40 48 L44 28 L48 48 L52 31 L56 48 L60 33 L64 48 L68 29 L72 48 L76 34 L80 48 L84 30 L88 48 L92 28 L96 48 L100 32 L104 48 L108 29 L112 48 L116 31 L120 48 L124 34 L128 48 L132 28 L136 48 L140 32 L144 48 L148 29 L152 48 L156 30 L160 48 L164 33 L168 48 L172 28 L176 48 L180 34 L184 48 L188 29 L192 48 L196 31 L200 48 L204 28 L208 48 L212 33 L216 48 L220 30 L224 48 L228 29 L232 48 L236 32 L240 48 Z"/><path fill="%232F601C" d="M0 48 L3 36 L6 48 L9 33 L12 48 L15 38 L18 48 L21 34 L24 48 L27 40 L30 48 L33 33 L36 48 L39 37 L42 48 L45 39 L48 48 L51 34 L54 48 L57 40 L60 48 L63 36 L66 48 L69 33 L72 48 L75 38 L78 48 L81 35 L84 48 L87 37 L90 48 L93 40 L96 48 L99 33 L102 48 L105 38 L108 48 L111 34 L114 48 L117 36 L120 48 L123 39 L126 48 L129 33 L132 48 L135 40 L138 48 L141 34 L144 48 L147 37 L150 48 L153 33 L156 48 L159 38 L162 48 L165 36 L168 48 L171 34 L174 48 L177 40 L180 48 L183 33 L186 48 L189 37 L192 48 L195 39 L198 48 L201 34 L204 48 L207 36 L210 48 L213 33 L216 48 L219 40 L222 48 L225 34 L228 48 L231 38 L234 48 L237 33 L240 48 Z"/></svg>');
+  }
+  .grass-strip {
+    position: absolute; left: 0; bottom: -1px; height: 44px; z-index: 0;
+    display: flex; width: calc(200vw + 240px);
+    animation: grass-roll 34s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes grass-roll {
+    from { transform: translateX(calc(-100vw - 152px)); }
+    to { transform: translateX(-32px); }
   }
   .eyebrow {
     display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
@@ -168,8 +174,9 @@
   .facts li { list-style: none; font-size: 15px; font-weight: 700; color: var(--ink-soft); }
   .facts li::before { content: "✓ "; color: var(--grass-bright); }
 
-  .grass-edge {
-    display: block; width: 100%; height: 44px; margin-bottom: -1px;
+  .gb { height: 100%; flex: 0 0 auto; background-repeat: repeat-x; background-position: bottom left; background-size: 220px 44px; }
+  .gb-tall {
+    width: calc(40vw + 48px);
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><path fill="%238FBB6C" d="M0 48 L6 22 L12 48 L18 14 L24 48 L30 26 L36 48 L42 18 L48 48 L54 28 L60 48 L66 16 L72 48 L78 20 L84 48 L90 24 L96 48 L102 30 L108 48 L114 18 L120 48 L126 24 L132 48 L138 16 L144 48 L150 26 L156 48 L162 20 L168 48 L174 28 L180 48 L186 14 L192 48 L198 22 L204 48 L210 26 L216 48 L222 18 L228 48 L234 24 L240 48 Z"/><path fill="%232F601C" d="M0 48 L4 12 L8 48 L12 26 L16 48 L20 8 L24 48 L28 20 L32 48 L36 30 L40 48 L44 6 L48 48 L52 16 L56 48 L60 24 L64 48 L68 10 L72 48 L76 28 L80 48 L84 14 L88 48 L92 22 L96 48 L100 4 L104 48 L108 18 L112 48 L116 26 L120 48 L124 10 L128 48 L132 30 L136 48 L140 8 L144 48 L148 20 L152 48 L156 14 L160 48 L164 24 L168 48 L172 6 L176 48 L180 28 L184 48 L188 16 L192 48 L196 22 L200 48 L204 10 L208 48 L212 26 L216 48 L220 12 L224 48 L228 18 L232 48 L236 8 L240 48 Z"/></svg>');
     background-repeat: repeat-x;
     background-position: bottom left;
@@ -354,8 +361,10 @@
         <circle cx="57" cy="45" r="3.2" fill="#262626"/>
       </svg>
     </div>
-    <div class="grass-stubble" aria-hidden="true"></div>
-    <div class="grass-edge" aria-hidden="true"></div>
+    <div class="grass-strip" aria-hidden="true">
+      <div class="gb gb-tall"></div><div class="gb gb-mid"></div><div class="gb gb-low"></div><div class="gb gb-stub"></div>
+      <div class="gb gb-tall"></div><div class="gb gb-mid"></div><div class="gb gb-low"></div><div class="gb gb-stub"></div>
+    </div>
   </section>
 
   <section class="band band-green zamer-band">
