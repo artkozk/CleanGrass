@@ -67,8 +67,8 @@
   .hero { padding: 26px 0 0; position: relative; overflow: hidden; }
 
   .mower {
-    position: absolute; bottom: 26px; left: 0; width: 76px; height: 80px;
-    pointer-events: none; z-index: 1;
+    position: absolute; bottom: 18px; left: 0; width: 88px; height: 88px;
+    pointer-events: none; z-index: 2;
     animation: mower-walk 34s linear infinite;
   }
   @keyframes mower-walk {
@@ -77,19 +77,33 @@
   }
   .mower svg { width: 100%; height: 100%; animation: mower-bob 0.55s ease-in-out infinite alternate; }
   @keyframes mower-bob { from { transform: translateY(0); } to { transform: translateY(2px); } }
-  .mower .leg { transform-box: view-box; transform-origin: 32px 46px; animation: mower-step 0.55s ease-in-out infinite alternate; }
+  .mower .leg { transform-box: view-box; transform-origin: 38px 54px; animation: mower-step 0.55s ease-in-out infinite alternate; }
   .mower .leg-b { animation-direction: alternate-reverse; }
-  @keyframes mower-step { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
-  .mower .rig { transform-box: view-box; transform-origin: 44px 36px; animation: mower-swing 0.8s ease-in-out infinite alternate; }
-  @keyframes mower-swing { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+  @keyframes mower-step { from { transform: rotate(-11deg); } to { transform: rotate(11deg); } }
+  .mower .rig { transform-box: view-box; transform-origin: 50px 38px; animation: mower-swing 0.8s ease-in-out infinite alternate; }
+  @keyframes mower-swing { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
   .mower .p { opacity: 0; }
   .mower .p1 { animation: mower-fly1 0.8s linear infinite; }
   .mower .p2 { animation: mower-fly2 1.05s linear infinite 0.3s; }
   .mower .p3 { animation: mower-fly3 0.9s linear infinite 0.55s; }
+  .mower .p4 { animation: mower-fly2 1.2s linear infinite 0.7s; }
   @keyframes mower-fly1 { 0% { opacity: 0; transform: translate(0,0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-14px,-20px); } }
   @keyframes mower-fly2 { 0% { opacity: 0; transform: translate(0,0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-4px,-24px); } }
   @keyframes mower-fly3 { 0% { opacity: 0; transform: translate(0,0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-20px,-12px); } }
-  @media (max-width: 480px) { .mower { width: 60px; height: 64px; bottom: 22px; } }
+  @media (max-width: 480px) { .mower { width: 64px; height: 64px; bottom: 20px; } }
+
+  .grass-stubble {
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 44px; z-index: 0;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><rect x="0" y="45" width="240" height="3" fill="%232F601C"/><path fill="%238FBB6C" d="M0 48 L4 38 L8 48 L12 40 L16 48 L20 36 L24 48 L28 41 L32 48 L36 39 L40 48 L44 37 L48 48 L52 42 L56 48 L60 38 L64 48 L68 40 L72 48 L76 37 L80 48 L84 39 L88 48 L92 41 L96 48 L100 38 L104 48 L108 36 L112 48 L116 40 L120 48 L124 42 L128 48 L132 37 L136 48 L140 39 L144 48 L148 38 L152 48 L156 40 L160 48 L164 36 L168 48 L172 41 L176 48 L180 39 L184 48 L188 38 L192 48 L196 40 L200 48 L204 37 L208 48 L212 41 L216 48 L220 39 L224 48 L228 38 L232 48 L236 40 L240 48 Z"/><path fill="%232F601C" d="M0 48 L3 43 L6 48 L9 41 L12 48 L15 44 L18 48 L21 42 L24 48 L27 45 L30 48 L33 41 L36 48 L39 43 L42 48 L45 44 L48 48 L51 42 L54 48 L57 45 L60 48 L63 43 L66 48 L69 41 L72 48 L75 44 L78 48 L81 42 L84 48 L87 43 L90 48 L93 45 L96 48 L99 41 L102 48 L105 44 L108 48 L111 42 L114 48 L117 43 L120 48 L123 41 L126 48 L129 45 L132 48 L135 42 L138 48 L141 44 L144 48 L147 43 L150 48 L153 41 L156 48 L159 44 L162 48 L165 42 L168 48 L171 45 L174 48 L177 43 L180 48 L183 41 L186 48 L189 44 L192 48 L195 42 L198 48 L201 43 L204 48 L207 45 L210 48 L213 41 L216 48 L219 44 L222 48 L225 42 L228 48 L231 43 L234 48 L237 41 L240 48 Z"/></svg>');
+    background-repeat: repeat-x;
+    background-position: bottom left;
+    background-size: 220px 44px;
+  }
+  .grass-edge { position: relative; z-index: 1; animation: grass-reveal 34s linear infinite; }
+  @keyframes grass-reveal {
+    from { clip-path: inset(0 0 0 0); }
+    to { clip-path: inset(0 0 0 calc(100vw + 102px)); }
+  }
   .eyebrow {
     display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--grass); background: var(--grass-pale);
@@ -268,25 +282,41 @@
       </ul>
     </div>
     <div class="mower" aria-hidden="true">
-      <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-        <g fill="none" stroke="#24491A" stroke-linecap="round">
-          <line class="leg leg-a" x1="32" y1="46" x2="24" y2="74" stroke-width="6"/>
-          <line class="leg leg-b" x1="32" y1="46" x2="42" y2="72" stroke-width="6"/>
-          <line x1="30" y1="24" x2="32" y2="48" stroke-width="9"/>
-          <line x1="31" y1="29" x2="47" y2="39" stroke-width="5.5"/>
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <line x1="35" y1="33" x2="59" y2="49" stroke="#E9B183" stroke-width="4" stroke-linecap="round"/>
+        <g class="leg leg-b">
+          <line x1="38" y1="54" x2="47" y2="85" stroke="#46543A" stroke-width="7" stroke-linecap="round"/>
+          <ellipse cx="49" cy="87.5" rx="5" ry="2.8" fill="#262626"/>
         </g>
-        <circle cx="30" cy="15" r="7.5" fill="#24491A"/>
-        <path d="M22 13 L31 9 L38 12 L38 15 L22 15 Z" fill="#2F601C"/>
+        <path d="M31 29 L45 29 L48 54 L28 54 Z" fill="#4C8A2E"/>
+        <line x1="32" y1="31" x2="46" y2="50" stroke="#33421F" stroke-width="2"/>
+        <g class="leg leg-a">
+          <line x1="38" y1="54" x2="29" y2="86" stroke="#414F30" stroke-width="7" stroke-linecap="round"/>
+          <ellipse cx="27" cy="88.5" rx="5" ry="2.8" fill="#262626"/>
+        </g>
+        <circle cx="38" cy="19" r="9.5" fill="#F7C99B"/>
+        <circle cx="36.5" cy="18.5" r="1.1" fill="#3A2B18"/>
+        <circle cx="43.5" cy="18.5" r="1.1" fill="#3A2B18"/>
+        <path d="M39 23.5 Q42 26.5 45.5 23" stroke="#7A4A20" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <path d="M28 17 Q38 5.5 48 17 L48 19.5 L28 19.5 Z" fill="#3E7A24"/>
+        <path d="M46 15 L58.5 17.5 Q58.5 21 55 20.8 L46 19.8 Z" fill="#356B1E"/>
         <g class="rig">
-          <line x1="44" y1="36" x2="66" y2="61" stroke="#24491A" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="46" cy="37" r="4" fill="#24491A"/>
-          <ellipse cx="67" cy="63" rx="9" ry="3.5" fill="#2F601C"/>
-          <circle class="p p1" cx="62" cy="58" r="2.2" fill="#5FA134"/>
-          <circle class="p p2" cx="68" cy="57" r="1.8" fill="#5FA134"/>
-          <circle class="p p3" cx="58" cy="60" r="1.6" fill="#5FA134"/>
+          <line x1="50" y1="38" x2="80" y2="74" stroke="#A9B0B8" stroke-width="3.2" stroke-linecap="round"/>
+          <circle cx="49" cy="38" r="5" fill="#E8752A"/>
+          <circle cx="49" cy="38" r="2" fill="#B9581C"/>
+          <ellipse cx="82" cy="77" rx="8.5" ry="3.4" fill="#E8752A"/>
+          <ellipse cx="82" cy="79.5" rx="6" ry="2" fill="#B9581C"/>
+          <ellipse class="p p1" cx="84" cy="68" rx="2.2" ry="1.1" fill="#5FA134" transform="rotate(-30 84 68)"/>
+          <ellipse class="p p2" cx="88" cy="72" rx="2" ry="1" fill="#3E7A24" transform="rotate(20 88 72)"/>
+          <ellipse class="p p3" cx="79" cy="64" rx="1.8" ry="0.9" fill="#5FA134" transform="rotate(45 79 64)"/>
+          <circle class="p p4" cx="90" cy="66" r="1.3" fill="#8FBB6C"/>
         </g>
+        <circle cx="60" cy="50" r="3.2" fill="#262626"/>
+        <line x1="44" y1="33" x2="56" y2="44" stroke="#F7C99B" stroke-width="4.5" stroke-linecap="round"/>
+        <circle cx="57" cy="45" r="3.2" fill="#262626"/>
       </svg>
     </div>
+    <div class="grass-stubble" aria-hidden="true"></div>
     <div class="grass-edge" aria-hidden="true"></div>
   </section>
 
