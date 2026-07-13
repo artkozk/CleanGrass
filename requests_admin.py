@@ -18,6 +18,8 @@ import logging
 import os
 import re
 import sqlite3
+import threading
+import time
 import urllib.parse
 import urllib.request
 from datetime import date, datetime
@@ -50,19 +52,26 @@ def _ensure_columns():
     db.close()
 
 
-def max_send(user_id, text):
-    if not MAX_TOKEN or not user_id:
-        return
+def _max_send_blocking(user_id, text):
     url = f'{MAX_API}/messages?' + urllib.parse.urlencode({'user_id': user_id})
     req = urllib.request.Request(
         url, data=json.dumps({'text': text}, ensure_ascii=False).encode(),
         method='POST',
         headers={'Authorization': MAX_TOKEN, 'Content-Type': 'application/json'})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            r.read()
-    except Exception as e:
-        logging.error(f'max_send to {user_id}: {e}')
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                r.read()
+            return
+        except Exception as e:
+            logging.error(f'max_send to {user_id} attempt {attempt + 1}: {e}')
+            time.sleep(5 * (attempt + 1))
+
+
+def max_send(user_id, text):
+    if not MAX_TOKEN or not user_id:
+        return
+    threading.Thread(target=_max_send_blocking, args=(user_id, text), daemon=True).start()
 
 
 def parse_date(text):

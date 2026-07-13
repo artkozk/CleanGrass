@@ -10,6 +10,7 @@ import json
 import os
 import sqlite3
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -73,7 +74,7 @@ def esc(s):
     return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def notify_admins(req_id, name, phone, address, regular):
+def _notify_admins_blocking(req_id, name, phone, address, regular):
     if not BOT_TOKEN:
         print('BOT_TOKEN is empty, skip notify', file=sys.stderr)
         return
@@ -83,15 +84,26 @@ def notify_admins(req_id, name, phone, address, regular):
             f'👤 {esc(name)}\n'
             f'☎️ <code>{esc(phone)}</code>\n'
             f'📍 {esc(address)}')
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
     for chat_id in admin_ids():
         data = urllib.parse.urlencode({'chat_id': chat_id, 'text': text,
                                        'parse_mode': 'HTML'}).encode()
-        url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-        try:
-            with urllib.request.urlopen(url, data=data, timeout=15) as resp:
-                resp.read()
-        except Exception as e:
-            print(f'notify {chat_id} failed: {e}', file=sys.stderr)
+        # Telegram с этого сервера периодически недоступен по несколько
+        # секунд — без ретраев карточка молча теряется
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(url, data=data, timeout=10) as resp:
+                    resp.read()
+                break
+            except Exception as e:
+                print(f'notify {chat_id} attempt {attempt + 1} failed: {e}', file=sys.stderr)
+                time.sleep(5 * (attempt + 1))
+
+
+def notify_admins(req_id, name, phone, address, regular):
+    # в фоне: посетитель формы не должен ждать Telegram
+    threading.Thread(target=_notify_admins_blocking,
+                     args=(req_id, name, phone, address, regular), daemon=True).start()
 
 
 def rate_ok(ip):
@@ -139,14 +151,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(400, {'ok': False, 'error': 'missing fields'})
         if sum(c.isdigit() for c in phone) < 6:
             return self._reply(400, {'ok': False, 'error': 'bad phone'})
+        # дедуп только против двойной отправки: тот же телефон И адрес за 2 минуты
         digits = ''.join(c for c in phone if c.isdigit())
         db = sqlite3.connect(DB_PATH)
-        recent = db.execute("SELECT id, phone FROM site_requests "
-                            "WHERE created_at > datetime('now', 'localtime', '-30 minutes')").fetchall()
-        for rid, rphone in recent:
-            if ''.join(c for c in str(rphone) if c.isdigit()) == digits:
+        recent = db.execute("SELECT id, phone, address FROM site_requests "
+                            "WHERE source='site' AND created_at > datetime('now', 'localtime', '-2 minutes')").fetchall()
+        for rid, rphone, raddr in recent:
+            if (''.join(c for c in str(rphone) if c.isdigit()) == digits
+                    and str(raddr).strip().lower() == address.lower()):
                 db.close()
-                print(f'duplicate from {ip} (same phone as #{rid}), skipped')
+                print(f'double submit from {ip} (same as #{rid}), skipped')
                 return self._reply(200, {'ok': True, 'id': rid})
         cur = db.execute(
             'INSERT INTO site_requests (name, phone, address, regular) VALUES (?, ?, ?, ?)',

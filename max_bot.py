@@ -50,7 +50,8 @@ GREETING = ('Здравствуйте! Это «Покос 48» — покос �
 
 BOT_ID = None
 state: dict = {}
-_forwarded: dict = {}   # антиспам пересылки сообщений в TG: user_id -> [timestamps]
+_forwarded: dict = {}        # антиспам пересылки сообщений в TG: user_id -> [timestamps]
+_limit_notified: dict = {}   # когда клиенту последний раз говорили про лимит
 
 
 def load_env():
@@ -215,20 +216,31 @@ def admin_ids():
         return []
 
 
-def tg_notify(text, reply_markup=None):
+def _tg_notify_blocking(text, reply_markup=None):
     if not TG_TOKEN:
         return
+    url = f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage'
     for chat_id in admin_ids():
         payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}
         if reply_markup:
             payload['reply_markup'] = json.dumps(reply_markup)
         data = urllib.parse.urlencode(payload).encode()
-        url = f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage'
-        try:
-            with urllib.request.urlopen(url, data=data, timeout=15) as resp:
-                resp.read()
-        except Exception as e:
-            print(f'tg notify failed: {e}', file=sys.stderr)
+        # Telegram с сервера бывает недоступен по несколько секунд —
+        # без ретраев карточка молча теряется
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(url, data=data, timeout=10) as resp:
+                    resp.read()
+                break
+            except Exception as e:
+                print(f'tg notify attempt {attempt + 1} failed: {e}', file=sys.stderr)
+                time.sleep(5 * (attempt + 1))
+
+
+def tg_notify(text, reply_markup=None):
+    # в фоне: обработка апдейтов MAX не должна ждать Telegram
+    threading.Thread(target=_tg_notify_blocking, args=(text, reply_markup),
+                     daemon=True).start()
 
 
 def client_line(name, user_id, username=None):
@@ -435,20 +447,25 @@ def handle_update(u):
         cb = u.get('callback') or {}
         payload = cb.get('payload') or ''
         try:
-            api('POST', '/answers', {'callback_id': cb.get('callback_id')}, {'notification': ''})
-        except Exception:
-            pass
+            api('POST', '/answers', {'callback_id': cb.get('callback_id')}, {})
+        except Exception as e:
+            print(f'answer callback failed: {e}', file=sys.stderr)
         if payload in FLOWS:
             start_flow(user_id, name, payload)
         elif payload.startswith('addr:'):
             st = state.get(user_id)
-            if st and st['step'] == 'pick':
-                db = db_conn()
-                row = db.execute('SELECT address FROM max_addresses WHERE id=? AND user_id=?',
-                                 (int(payload.split(':')[1]), user_id)).fetchone()
-                db.close()
-                if row:
-                    address_chosen(user_id, row['address'])
+            if not st or st.get('step') != 'pick':
+                # нажали адрес на старом сообщении — считаем это новым заказом покоса
+                state[user_id] = {'flow': 'order', 'step': 'pick', 'name': name}
+            db = db_conn()
+            row = db.execute('SELECT address FROM max_addresses WHERE id=? AND user_id=?',
+                             (int(payload.split(':')[1]), user_id)).fetchone()
+            db.close()
+            if row:
+                address_chosen(user_id, row['address'])
+            else:
+                state.pop(user_id, None)
+                send(user_id, 'Этот адрес не нашёл. Начнём заново:', menu_for(user_id))
         elif payload == 'addr_new':
             st = state.get(user_id)
             if st:
@@ -491,13 +508,19 @@ def handle_update(u):
         elif text:
             upsert_client(user_id, name=name)
             now = time.time()
-            hits = [x for x in _forwarded.get(user_id, []) if now - x < 3600]
-            if len(hits) >= 5:
-                _forwarded[user_id] = hits
-                send(user_id, 'Ваши сообщения получили — ответим в ближайшее время.')
+            day_hits = [x for x in _forwarded.get(user_id, []) if now - x < 86400]
+            hour_hits = [x for x in day_hits if now - x < 3600]
+            if len(hour_hits) >= 3 or len(day_hits) >= 10:
+                _forwarded[user_id] = day_hits
+                # предупреждаем о лимите один раз, дальше молчим — иначе
+                # спамер получает бесконечный пинг-понг с ботом
+                if not _limit_notified.get(user_id) or now - _limit_notified[user_id] > 3600:
+                    _limit_notified[user_id] = now
+                    send(user_id, 'Ваши сообщения получили — ответим в ближайшее время.')
+                print(f'forward limit for {user_id}, message dropped: {text[:100]}')
                 return
-            hits.append(now)
-            _forwarded[user_id] = hits
+            day_hits.append(now)
+            _forwarded[user_id] = day_hits
             client = get_client(user_id)
             phone_note = ''
             if client and client['phone']:
