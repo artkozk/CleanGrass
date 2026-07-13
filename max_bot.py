@@ -277,10 +277,10 @@ def start_flow(user_id, name, flow):
         buttons = [[{'type': 'callback', 'text': f'📍 {a["address"][:40]}',
                      'payload': f'addr:{a["id"]}'}] for a in addrs]
         buttons.append([{'type': 'callback', 'text': '✏️ Другой адрес', 'payload': 'addr_new'}])
-        state[user_id] = {'flow': flow, 'step': 'pick', 'name': name}
+        state[user_id] = {'flow': flow, 'step': 'pick', 'name': name, 'ts': time.time()}
         send(user_id, 'По какому адресу?', buttons)
     else:
-        state[user_id] = {'flow': flow, 'step': 'address', 'name': name}
+        state[user_id] = {'flow': flow, 'step': 'address', 'name': name, 'ts': time.time()}
         send(user_id, 'Напишите адрес участка: село, улица, дом.')
 
 
@@ -447,7 +447,8 @@ def handle_update(u):
         cb = u.get('callback') or {}
         payload = cb.get('payload') or ''
         try:
-            api('POST', '/answers', {'callback_id': cb.get('callback_id')}, {})
+            api('POST', '/answers', {'callback_id': cb.get('callback_id')},
+                {'notification': 'Ок'})
         except Exception as e:
             print(f'answer callback failed: {e}', file=sys.stderr)
         if payload in FLOWS:
@@ -493,6 +494,12 @@ def handle_update(u):
             send(user_id, 'Хорошо, отменил. Выберите, что нужно:', menu_for(user_id))
             return
         st = state.get(user_id)
+        # брошенный диалог протухает через час: старый текст не считаем адресом/телефоном
+        if st and time.time() - st.get('ts', 0) > 3600:
+            state.pop(user_id, None)
+            st = None
+        if st:
+            st['ts'] = time.time()
         if st and st['step'] in ('address', 'pick'):
             if not text:
                 send(user_id, 'Напишите адрес текстом, пожалуйста.')

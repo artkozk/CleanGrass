@@ -37,8 +37,6 @@
     --featured-bg: #F7FBEF;
     --accent-text: #2F601C;
     --footer-bg: #22301B;
-    --ba-before-bg: #EFE8D2;
-    --ba-before-ink: #6B5A26;
     --fail: #8A3B12;
     --display: 'Podkova', 'PT Sans', serif;
     --body: 'PT Sans', system-ui, sans-serif;
@@ -53,8 +51,6 @@
       --featured-bg: #26331A;
       --accent-text: #8FBB6C;
       --footer-bg: #0F1409;
-      --ba-before-bg: #37331F;
-      --ba-before-ink: #CBB877;
       --fail: #E89A6B;
     }
   }
@@ -64,6 +60,8 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation: none !important; transition: none !important; }
+    .grass-strip { transform: translateX(calc(-100vw - 152px)); }
+    .mower { display: none; }
   }
   body {
     font-family: var(--body);
@@ -161,10 +159,6 @@
   .btn:active { transform: scale(0.97); }
   .btn-green { background: var(--grass); color: #fff; }
   .btn-green:hover { background: var(--grass-deep); }
-  .btn-line { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
-  .btn-line:hover { background: rgba(34,48,27,0.06); }
-  .btn-sun { background: var(--sun); color: #4A3405; }
-  .btn-sun:hover { background: #E3A517; }
 
   .facts { display: flex; flex-wrap: wrap; gap: 6px 22px; padding-bottom: 26px; }
   .facts li { list-style: none; font-size: 15px; font-weight: 700; color: var(--ink-soft); }

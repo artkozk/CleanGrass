@@ -108,10 +108,14 @@ def register(bot, is_admin):
         msg = bot.send_message(
             chat_id,
             f'📅 Дата первого покоса для заявки #{sub_id}?\n'
-            'Напишите, например: <b>15.07</b>')
+            'Напишите, например: <b>15.07</b> (или «отмена»)')
         bot.register_next_step_handler(msg, lambda m: set_date(m, sub_id))
 
     def set_date(message, sub_id):
+        if (message.text or '').strip().lower() in ('отмена', 'cancel', '/cancel'):
+            bot.send_message(message.chat.id,
+                             f'Ок, заявка #{sub_id} осталась без даты. Вернуться: /subs')
+            return
         d = parse_date(message.text)
         if not d:
             bot.send_message(message.chat.id, 'Не понял дату. Пример: 15.07')
@@ -257,7 +261,9 @@ def register(bot, is_admin):
         if not is_admin(message.from_user.id):
             return
         db = _db()
-        rows = db.execute("SELECT * FROM site_requests WHERE status='new' "
+        # created_at хранится по часам сервера (UTC) — показываем по Москве
+        rows = db.execute("SELECT *, datetime(created_at, '+3 hours') AS created_msk "
+                          "FROM site_requests WHERE status='new' "
                           'ORDER BY id DESC LIMIT 8').fetchall()
         db.close()
         if not rows:
@@ -278,5 +284,5 @@ def register(bot, is_admin):
                 f'🧾 Заявка #{r["id"]} ({src}) — {kind}'
                 f'{" · регулярно" if r["regular"] else ""}\n'
                 f'👤 {_esc(r["name"])}\n☎️ <code>{_esc(r["phone"])}</code>\n'
-                f'📍 {_esc(r["address"])}\n🕒 {r["created_at"]}',
+                f'📍 {_esc(r["address"])}\n🕒 {r["created_msk"]} мск',
                 reply_markup=json.dumps(kb))
