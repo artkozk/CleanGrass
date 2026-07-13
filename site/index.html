@@ -36,6 +36,8 @@
     --ba-before-bg: #EFE8D2;
     --ba-before-ink: #6B5A26;
     --fail: #8A3B12;
+    --cut-start: 99px;
+    --cut-end: 219px;
     --display: 'Podkova', 'PT Sans', serif;
     --body: 'PT Sans', system-ui, sans-serif;
   }
@@ -91,7 +93,7 @@
   .hero .wrap { padding-bottom: 58px; }
 
   .mower {
-    position: absolute; bottom: 14px; left: 0; width: 84px; height: 84px;
+    position: absolute; bottom: 0; left: 0; width: 84px; height: 84px;
     pointer-events: none; z-index: 2;
     animation: mower-walk 34s linear infinite;
   }
@@ -115,8 +117,9 @@
   @keyframes mower-fly2 { 0% { opacity: 0; transform: translate(0,0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-4px,-24px); } }
   @keyframes mower-fly3 { 0% { opacity: 0; transform: translate(0,0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-20px,-12px); } }
   @media (max-width: 480px) {
-    .mower { width: 64px; height: 64px; bottom: 18px; }
+    .mower { width: 64px; height: 64px; bottom: 0; }
     .hero .wrap { padding-bottom: 46px; }
+    :root { --cut-start: 82px; --cut-end: 202px; }
   }
 
   .grass-stubble {
@@ -126,10 +129,14 @@
     background-position: bottom left;
     background-size: 220px 44px;
   }
-  .grass-edge { position: relative; z-index: 1; animation: grass-reveal 34s linear infinite; }
+  .grass-edge {
+    position: relative; z-index: 1;
+    margin-left: -120px; width: calc(100% + 120px);
+    animation: grass-reveal 34s linear infinite;
+  }
   @keyframes grass-reveal {
-    from { clip-path: inset(0 0 0 0); }
-    to { clip-path: inset(0 0 0 calc(100vw + 102px)); }
+    from { clip-path: inset(0 0 0 var(--cut-start)); }
+    to { clip-path: inset(0 0 0 calc(100vw + var(--cut-end))); }
   }
   .eyebrow {
     display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
@@ -140,7 +147,9 @@
   h1 em { font-style: normal; color: var(--accent-text); }
   .hero p.lead { font-size: 19px; color: var(--ink-soft); max-width: 32em; margin-bottom: 24px; }
 
-  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .hero-alt { font-size: 15px; color: var(--ink-soft); margin-bottom: 22px; }
+  .hero-alt a { font-weight: 700; text-decoration: none; }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     font-family: var(--body); font-weight: 700; font-size: 17px; text-decoration: none;
@@ -302,9 +311,8 @@
       <p class="lead">Косим 4-й год: участки, дворы, палисадники и всё, что заросло. Свой инструмент. Цену называем до начала работ — и она не меняется.</p>
       <div class="cta-row">
         <a class="btn btn-green" href="#zayavka">Оставить заявку</a>
-        <a class="btn btn-line" href="tel:+79508058686">Позвонить</a>
-        <a class="btn btn-line" href="https://max.ru/id482601120989_bot">Написать в MAX</a>
       </div>
+      <p class="hero-alt">Или напрямую: <a href="tel:+79508058686">+7 950 805-86-86</a> · <a href="https://max.ru/id482601120989_bot">MAX</a> · <a href="https://t.me/pokos48">Telegram</a></p>
       <ul class="facts">
         <li>4-й год косим</li>
         <li>приезжаем за 1–2 дня</li>
