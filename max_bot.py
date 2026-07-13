@@ -260,6 +260,8 @@ def menu_for(user_id):
     ]
     if get_subscription(user_id):
         buttons.append([{'type': 'callback', 'text': 'ℹ️ Мой регулярный покос', 'payload': 'sub_info'}])
+    buttons.append([{'type': 'link', 'text': '🌐 Цены и фото работ — pokos48.ru',
+                     'url': 'https://pokos48.ru'}])
     return buttons
 
 
