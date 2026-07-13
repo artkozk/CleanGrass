@@ -10,6 +10,10 @@
 <meta property="og:url" content="https://pokos48.ru/">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="ru_RU">
+<meta property="og:image" content="https://pokos48.ru/photos/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#2F601C">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
@@ -206,10 +210,13 @@
   .price-foot a { font-weight: 700; }
 
   .beforeafter { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .ba-slot { border-radius: 14px; aspect-ratio: 4 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-weight: 700; font-size: 15px; }
-  .ba-before { background: var(--ba-before-bg); color: var(--ba-before-ink); }
-  .ba-after { background: var(--grass-pale); color: var(--accent-text); }
-  .ba-slot small { font-weight: 400; font-size: 13px; opacity: 0.75; }
+  .ba-slot { border-radius: 14px; aspect-ratio: 4 / 3; overflow: hidden; position: relative; margin: 0; }
+  .ba-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ba-slot figcaption {
+    position: absolute; top: 10px; left: 10px; background: rgba(34,48,27,0.78); color: #fff;
+    font-weight: 700; font-size: 13px; padding: 3px 13px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
   .photo-note { font-size: 14px; color: var(--ink-soft); margin-top: 12px; max-width: 38em; }
 
   .steps { list-style: none; counter-reset: step; display: grid; gap: 12px; }
@@ -408,10 +415,10 @@
     <div class="wrap">
       <h2>До и после</h2>
       <div class="beforeafter">
-        <div class="ba-slot ba-before">заросло<small>фото «до» — скоро здесь</small></div>
-        <div class="ba-slot ba-after">подстрижено<small>фото «после» — скоро здесь</small></div>
+        <figure class="ba-slot"><img src="photos/do.jpg" alt="Заросший травой участок до покоса" loading="lazy" width="1080" height="810"><figcaption>до</figcaption></figure>
+        <figure class="ba-slot"><img src="photos/posle.jpg" alt="Тот же участок после покоса" loading="lazy" width="1080" height="810"><figcaption>после</figcaption></figure>
       </div>
-      <p class="photo-note">Дворы клиентов не публикуем из уважения к соседям — работу показываем на нашем собственном участке.</p>
+      <p class="photo-note">Один и тот же участок: трава по пояс — и через пару часов работы.</p>
     </div>
   </section>
 
