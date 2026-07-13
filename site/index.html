@@ -528,6 +528,19 @@
       msg.textContent = 'Не получилось отправить. Позвоните: +7 950 805-86-86.';
     }
   });
+
+  const hit = (event) => {
+    try {
+      navigator.sendBeacon('/api/hit', JSON.stringify({ event, ref: document.referrer || '' }));
+    } catch {}
+  };
+  if (!sessionStorage.getItem('seen')) {
+    sessionStorage.setItem('seen', '1');
+    hit('view');
+  }
+  document.querySelectorAll('a[href^="tel:"]').forEach(a => a.addEventListener('click', () => hit('click_phone')));
+  document.querySelectorAll('a[href*="max.ru"]').forEach(a => a.addEventListener('click', () => hit('click_max')));
+  document.querySelectorAll('a[href*="t.me"]').forEach(a => a.addEventListener('click', () => hit('click_tg')));
 </script>
 </body>
 </html>

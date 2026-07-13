@@ -6,6 +6,7 @@ POST /api/request  {name, phone, address, regular}
 уведомление всем админам бота в Telegram. Слушает только 127.0.0.1:8091 —
 наружу проксируется через nginx (location /api/).
 """
+import hashlib
 import json
 import os
 import sqlite3
@@ -43,8 +44,19 @@ def load_env():
 BOT_TOKEN = load_env().get('BOT_TOKEN', '')
 
 
+ALLOWED_EVENTS = {'view', 'click_phone', 'click_max', 'click_tg'}
+_hit_rate: dict = {}
+
+
 def ensure_table():
     db = sqlite3.connect(DB_PATH)
+    db.execute('''CREATE TABLE IF NOT EXISTS site_hits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event TEXT NOT NULL,
+        ref TEXT,
+        visitor TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )''')
     db.execute('''CREATE TABLE IF NOT EXISTS site_requests (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -126,10 +138,43 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _handle_hit(self, ip):
+        ua = self.headers.get('User-Agent', '')
+        if any(b in ua.lower() for b in ('bot', 'crawler', 'spider', 'preview')):
+            return self._reply(200, {'ok': True})
+        now = time.time()
+        hits = [t for t in _hit_rate.get(ip, []) if now - t < 3600]
+        if len(hits) >= 120:
+            _hit_rate[ip] = hits
+            return self._reply(200, {'ok': True})
+        hits.append(now)
+        _hit_rate[ip] = hits
+        length = int(self.headers.get('Content-Length') or 0)
+        if not 0 < length <= MAX_BODY:
+            return self._reply(400, {'ok': False})
+        try:
+            data = json.loads(self.rfile.read(length).decode('utf-8'))
+        except Exception:
+            return self._reply(400, {'ok': False})
+        event = str(data.get('event', ''))
+        if event not in ALLOWED_EVENTS:
+            return self._reply(400, {'ok': False})
+        ref = str(data.get('ref', ''))[:200]
+        visitor = hashlib.sha1(f'{ip}|{ua}'.encode()).hexdigest()[:16]
+        db = sqlite3.connect(DB_PATH)
+        db.execute('INSERT INTO site_hits (event, ref, visitor) VALUES (?, ?, ?)',
+                   (event, ref, visitor))
+        db.commit()
+        db.close()
+        self._reply(200, {'ok': True})
+
     def do_POST(self):
-        if self.path.rstrip('/') != '/api/request':
-            return self._reply(404, {'ok': False, 'error': 'not found'})
         ip = self.headers.get('X-Real-IP') or self.client_address[0]
+        path = self.path.rstrip('/')
+        if path == '/api/hit':
+            return self._handle_hit(ip)
+        if path != '/api/request':
+            return self._reply(404, {'ok': False, 'error': 'not found'})
         if not rate_ok(ip):
             return self._reply(429, {'ok': False, 'error': 'too many requests'})
         length = int(self.headers.get('Content-Length') or 0)

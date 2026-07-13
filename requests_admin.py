@@ -48,6 +48,13 @@ def _ensure_columns():
             db.execute(ddl)
         except sqlite3.OperationalError:
             pass
+    db.execute('''CREATE TABLE IF NOT EXISTS site_hits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event TEXT NOT NULL,
+        ref TEXT,
+        visitor TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )''')
     db.commit()
     db.close()
 
@@ -255,6 +262,47 @@ def register(bot, is_admin):
                 f'👤 {_esc(sub["name"])}\n☎️ <code>{_esc(sub["phone"])}</code>\n'
                 f'📍 {_esc(sub["address"])}',
                 reply_markup=json.dumps(kb))
+
+    @bot.message_handler(commands=['site'])
+    def cmd_site(message):
+        if not is_admin(message.from_user.id):
+            return
+        db = _db()
+        periods = [('-1 day', '24 часа'), ('-7 days', '7 дней'), ('-100 years', 'всего')]
+
+        def cnt3(where_sql):
+            vals = []
+            for shift, _ in periods:
+                q = (where_sql + " AND created_at > datetime('now', 'localtime', ?)")
+                vals.append(db.execute(q, (shift,)).fetchone()[0])
+            return ' / '.join(str(v) for v in vals)
+
+        text = ['📊 <b>Сайт</b> (за 24 часа / 7 дней / всё время)', '']
+        text.append('👀 Просмотры: ' + cnt3("SELECT COUNT(*) FROM site_hits WHERE event='view'"))
+        text.append('👤 Уникальных: ' + cnt3(
+            "SELECT COUNT(DISTINCT visitor) FROM site_hits WHERE event='view'"))
+        text.append('📞 Кликов по телефону: ' + cnt3(
+            "SELECT COUNT(*) FROM site_hits WHERE event='click_phone'"))
+        text.append('💬 Переходов в MAX: ' + cnt3(
+            "SELECT COUNT(*) FROM site_hits WHERE event='click_max'"))
+        text.append('✈️ Переходов в Telegram: ' + cnt3(
+            "SELECT COUNT(*) FROM site_hits WHERE event='click_tg'"))
+        text.append('')
+        text.append('🧾 Заявки с сайта: ' + cnt3(
+            "SELECT COUNT(*) FROM site_requests WHERE source='site'"))
+        text.append('💚 Заявки из MAX: ' + cnt3(
+            "SELECT COUNT(*) FROM site_requests WHERE source='max'"))
+        text.append('🆕 Новых клиентов в MAX-боте: ' + cnt3(
+            'SELECT COUNT(*) FROM max_clients WHERE 1=1'))
+        refs = db.execute(
+            "SELECT ref, COUNT(*) n FROM site_hits WHERE event='view' AND ref != '' "
+            "GROUP BY ref ORDER BY n DESC LIMIT 3").fetchall()
+        if refs:
+            text.append('')
+            text.append('🔗 Откуда приходят: ' + ', '.join(
+                f'{_esc(r["ref"][:40])} ({r["n"]})' for r in refs))
+        db.close()
+        bot.send_message(message.chat.id, '\n'.join(text))
 
     @bot.message_handler(commands=['zayavki'])
     def cmd_zayavki(message):
