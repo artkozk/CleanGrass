@@ -178,7 +178,15 @@
   .facts li { list-style: none; font-size: 15px; font-weight: 700; color: var(--ink-soft); }
   .facts li::before { content: "✓ "; color: var(--grass-bright); }
 
-  .gb { height: 100%; flex: 0 0 auto; background-repeat: repeat-x; background-position: bottom left; background-size: 220px 44px; }
+  .gb {
+    height: 100%; flex: 0 0 auto;
+    background-repeat: repeat-x; background-position: 0 100%; background-size: 220px 44px;
+    animation: grass-anchor 34s linear infinite;
+  }
+  @keyframes grass-anchor {
+    from { background-position: 0 100%; }
+    to { background-position: calc(-100vw - 120px) 100%; }
+  }
   .gb-tall {
     width: calc(40vw + 48px);
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48"><path fill="%238FBB6C" d="M0 48 L6 22 L12 48 L18 14 L24 48 L30 26 L36 48 L42 18 L48 48 L54 28 L60 48 L66 16 L72 48 L78 20 L84 48 L90 24 L96 48 L102 30 L108 48 L114 18 L120 48 L126 24 L132 48 L138 16 L144 48 L150 26 L156 48 L162 20 L168 48 L174 28 L180 48 L186 14 L192 48 L198 22 L204 48 L210 26 L216 48 L222 18 L228 48 L234 24 L240 48 Z"/><path fill="%232F601C" d="M0 48 L4 12 L8 48 L12 26 L16 48 L20 8 L24 48 L28 20 L32 48 L36 30 L40 48 L44 6 L48 48 L52 16 L56 48 L60 24 L64 48 L68 10 L72 48 L76 28 L80 48 L84 14 L88 48 L92 22 L96 48 L100 4 L104 48 L108 18 L112 48 L116 26 L120 48 L124 10 L128 48 L132 30 L136 48 L140 8 L144 48 L148 20 L152 48 L156 14 L160 48 L164 24 L168 48 L172 6 L176 48 L180 28 L184 48 L188 16 L192 48 L196 22 L200 48 L204 10 L208 48 L212 26 L216 48 L220 12 L224 48 L228 18 L232 48 L236 8 L240 48 Z"/></svg>');
