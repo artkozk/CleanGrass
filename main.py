@@ -4,7 +4,7 @@ import re
 import tempfile
 import threading
 import time
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -1320,9 +1320,46 @@ def _site_slide_caption(s:Dict, idx:int, total:int, q:Optional[str]) -> str:
     ]
     return "\n".join(lines)
 
-def _show_site_slide(chat_id:int, uid:int, idx:int, delete_msg_id:Optional[int]=None):
+def _edit_or_send(chat_id:int, mid:Optional[int], has_media:bool, photo:Optional[str], caption:str, kb):
+    """Редактируем сообщение на месте, чтобы не спамить. Возвращает (message_id, has_media) итогового сообщения."""
+    if mid:
+        try:
+            if photo and has_media:
+                bot.edit_message_media(types.InputMediaPhoto(photo, caption=caption, parse_mode='HTML'),
+                                       chat_id, mid, reply_markup=kb)
+                return mid, True
+            if not photo and not has_media:
+                bot.edit_message_text(caption, chat_id, mid, reply_markup=kb)
+                return mid, False
+        except Exception as e:
+            if 'message is not modified' in str(e):
+                return mid, has_media
+            logging.error(f"edit in place: {e}")
+        # тип сообщения сменился (текст<->фото) или редактирование не удалось
+        try: bot.delete_message(chat_id, mid)
+        except Exception: pass
+    if photo:
+        try:
+            m=bot.send_photo(chat_id, photo, caption=caption, reply_markup=kb)
+            return m.message_id, True
+        except Exception as e:
+            logging.error(f"send photo card: {e}")
+    m=bot.send_message(chat_id, caption, reply_markup=kb)
+    return m.message_id, False
+
+def _slider_src(uid:int, call_msg:Optional[types.Message]) -> Tuple[Optional[int], bool]:
+    """Источник для редактирования: сообщение колбэка или запомненный слайдер."""
+    if call_msg is not None:
+        return call_msg.message_id, bool(call_msg.photo)
+    saved=(temp.get(uid) or {}).get('sites_msg')
+    if saved:
+        return saved.get('mid'), bool(saved.get('media'))
+    return None, False
+
+def _show_site_slide(chat_id:int, uid:int, idx:int, src_msg:Optional[types.Message]=None):
     sites=_slider_sites(uid)
     q=(temp.get(uid) or {}).get('sites_q')
+    mid, has_media=_slider_src(uid, src_msg)
     if not sites:
         kb=types.InlineKeyboardMarkup(row_width=1)
         kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
@@ -1331,31 +1368,28 @@ def _show_site_slide(chat_id:int, uid:int, idx:int, delete_msg_id:Optional[int]=
         kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
         text=f"По запросу «{q}» ничего не нашёл. Напиши иначе — ищу по адресу, имени и телефону." if q else \
              "🏡 Участков пока нет — создай первый:"
-        bot.send_message(chat_id, text, reply_markup=kb)
+        nmid, nmedia=_edit_or_send(chat_id, mid, has_media, None, text, kb)
+        temp.setdefault(uid,{})['sites_msg']={'mid':nmid,'media':nmedia}
         return
     idx=max(0, min(idx, len(sites)-1))
+    temp.setdefault(uid,{})['sites_idx']=idx
     s=sites[idx]
     cap=_site_slide_caption(s, idx, len(sites), q)
     kb=site_slider_kb(idx, len(sites), s['id'], has_query=bool(q))
-    if delete_msg_id:
-        try: bot.delete_message(chat_id, delete_msg_id)
-        except Exception: pass
     photo=db.get_site_preview_photo(s['id'])
-    if photo:
-        try:
-            bot.send_photo(chat_id, photo, caption=cap, reply_markup=kb)
-            return
-        except Exception as e:
-            logging.error(f"site slide photo: {e}")
-    bot.send_message(chat_id, cap, reply_markup=kb)
+    nmid, nmedia=_edit_or_send(chat_id, mid, has_media, photo, cap, kb)
+    temp.setdefault(uid,{})['sites_msg']={'mid':nmid,'media':nmedia}
 
 @bot.callback_query_handler(func=lambda c: c.data=='asites')
 def asites(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
-    temp[uid]={'flow':'sites_browse'}
+    ctx=temp.get(uid) or {}
+    # сохраняем поиск и позицию, если возвращаемся из карточки участка
+    temp[uid]={k:v for k,v in ctx.items() if k in ('sites_q','sites_idx')}
+    temp[uid]['flow']='sites_browse'
     bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
-    _show_site_slide(call.message.chat.id, uid, 0)
+    _show_site_slide(call.message.chat.id, uid, int(temp[uid].get('sites_idx') or 0), src_msg=call.message)
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('aslide:'))
@@ -1365,7 +1399,7 @@ def aslide(call: types.CallbackQuery):
     idx=int(call.data.split(':')[1])
     temp.setdefault(uid,{}).setdefault('flow','sites_browse')
     bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
-    _show_site_slide(call.message.chat.id, uid, idx, delete_msg_id=call.message.message_id)
+    _show_site_slide(call.message.chat.id, uid, idx, src_msg=call.message)
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data=='aslide_reset')
@@ -1374,7 +1408,7 @@ def aslide_reset(call: types.CallbackQuery):
     uid=call.from_user.id
     temp.setdefault(uid,{}).pop('sites_q', None)
     bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
-    _show_site_slide(call.message.chat.id, uid, 0, delete_msg_id=call.message.message_id)
+    _show_site_slide(call.message.chat.id, uid, 0, src_msg=call.message)
     safe_answer(call)
 
 @bot.message_handler(state=AdminSitesStates.search)
@@ -1386,6 +1420,9 @@ def asites_search(message: types.Message):
         return
     temp.setdefault(uid,{})['sites_q']=q
     temp[uid].setdefault('flow','sites_browse')
+    # подчищаем запрос пользователя, слайдер обновится на месте
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except Exception: pass
     _show_site_slide(message.chat.id, uid, 0)
 
 # ---------------- NEW: зоны из карточки участка ----------------
@@ -1629,7 +1666,7 @@ def afind_pmax(message: types.Message):
     temp.setdefault(uid,{})['f_pmax']=pmax
     _find_next(uid, message.chat.id)
 
-def asite_show(chat_id:int, uid:int, site_id:int):
+def asite_show(chat_id:int, uid:int, site_id:int, src_msg:Optional[types.Message]=None):
     lang=get_lang(uid)
     s=db.get_site(site_id)
     if not s:
@@ -1648,20 +1685,21 @@ def asite_show(chat_id:int, uid:int, site_id:int):
     text += f"\n⏰ Напоминание: раз в {int(s.get('remind_days') or 30)} дн."
     kb=admin_site_actions_kb(site_id, T, lang)
     photo=db.get_site_preview_photo(site_id)
-    if photo and len(text)<=1000:
-        try:
-            bot.send_photo(chat_id, photo, caption=text, reply_markup=kb)
-            return
-        except Exception as e:
-            logging.error(f"site card photo: {e}")
-    bot.send_message(chat_id, text, reply_markup=kb)
+    if photo and len(text)>1000:
+        photo=None
+    mid=src_msg.message_id if src_msg is not None else None
+    has_media=bool(src_msg.photo) if src_msg is not None else False
+    _edit_or_send(chat_id, mid, has_media, photo, text, kb)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite:'))
 def asite(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
-    temp.pop(uid,None); bot.delete_state(uid, call.message.chat.id)
-    asite_show(call.message.chat.id, uid, int(call.data.split(':')[1]))
+    ctx=temp.get(uid) or {}
+    # держим контекст слайдера, чтобы «К участкам» вернул на то же место без нового сообщения
+    temp[uid]={k:v for k,v in ctx.items() if k in ('sites_q','sites_idx','sites_msg')}
+    bot.delete_state(uid, call.message.chat.id)
+    asite_show(call.message.chat.id, uid, int(call.data.split(':')[1]), src_msg=call.message)
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite_orders:'))
