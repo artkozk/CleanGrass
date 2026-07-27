@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from typing import List, Dict, Optional, Tuple, Any
 import logging
@@ -6,6 +7,8 @@ class Database:
     def __init__(self, db_name: str):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        # LIKE в SQLite регистронезависим только для латиницы — для кириллицы своя функция
+        self.conn.create_function('cg_lower', 1, lambda s: s.lower() if isinstance(s, str) else s)
         self._init_db()
         logging.basicConfig(level=logging.INFO)
 
@@ -397,6 +400,35 @@ class Database:
         rows = self.conn.execute("""
             SELECT * FROM sites ORDER BY COALESCE(last_service_at, created_at) DESC LIMIT ?
         """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_site_preview_photo(self, site_id:int) -> Optional[str]:
+        """Первое фото самого свежего заказа с фото — превью участка."""
+        row=self.conn.execute("""
+            SELECT sp.file_id FROM service_photos sp
+            JOIN service_orders so ON so.id=sp.order_id
+            WHERE so.site_id=?
+            ORDER BY so.service_at DESC, so.created_at DESC, sp.id ASC LIMIT 1
+        """, (site_id,)).fetchone()
+        return row['file_id'] if row else None
+
+    def search_sites_smart(self, q:str, limit:int=30) -> List[Dict]:
+        """Одно поле на всё: адрес, имя, телефон. Сам определяет, что ввели."""
+        q=(q or '').strip()
+        if not q:
+            return self.list_sites_recent(limit)
+        digits=re.sub(r'\D','',q)
+        ql=f"%{q.lower()}%"
+        clauses=["cg_lower(address) LIKE ?","cg_lower(COALESCE(contact_name,'')) LIKE ?"]
+        params=[ql, ql]
+        if len(digits)>=5:
+            # телефон: сравниваем только цифры, без +, скобок и дефисов
+            clauses.append("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(contact_phone,''),' ',''),'-',''),'(',''),')',''),'+','') LIKE ?")
+            params.append(f"%{digits}%")
+        rows=self.conn.execute(f"""
+            SELECT * FROM sites WHERE {" OR ".join(clauses)}
+            ORDER BY COALESCE(last_service_at, created_at) DESC LIMIT ?
+        """, tuple(params+[limit])).fetchall()
         return [dict(r) for r in rows]
 
     def count_orders_for_site(self, site_id:int) -> int:

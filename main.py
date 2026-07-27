@@ -31,7 +31,8 @@ from keyboards import (
     work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb, duration_quick_kb, paid_quick_kb,
     helper_yn_kb, helper_names_kb, dad_share_kb, skip_kb, step_nav_kb, prompt_cancel_kb,
     stats_period_kb, remind_actions_kb,
-    site_pick_kb, sites_browse_kb, search_results_kb, zones_manage_kb, confirm_action_kb
+    site_pick_kb, sites_browse_kb, search_results_kb, zones_manage_kb, confirm_action_kb,
+    site_slider_kb
 )
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', format='%(asctime)s %(levelname)s %(message)s')
@@ -615,12 +616,12 @@ def a_site_search(message: types.Message):
         bot.set_state(uid, AdminOrderStates.new_site_address, message.chat.id)
         bot.send_message(message.chat.id, T(get_lang(uid),'admin_new_site_address'))
         return
-    sites=db.search_sites(q, limit=20)
+    sites=db.search_sites_smart(q, limit=20)
     if not sites:
         kb=types.InlineKeyboardMarkup(row_width=1)
         kb.add(types.InlineKeyboardButton("➕ Создать новый участок", callback_data="aneworder_newsite"))
         kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
-        bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл. Попробуй написать иначе — или создай участок:", reply_markup=kb)
+        bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл (ищу по адресу, имени, телефону). Попробуй иначе — или создай участок:", reply_markup=kb)
         return
     bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "aneworder_site"))
 
@@ -1302,30 +1303,92 @@ def order_step_back(call: types.CallbackQuery):
 
 # ---------------- NEW: раздел «Участки» ----------------
 
+def _slider_sites(uid:int) -> List[Dict]:
+    q=(temp.get(uid) or {}).get('sites_q')
+    return db.search_sites_smart(q, limit=30) if q else db.list_sites_recent(limit=30)
+
+def _site_slide_caption(s:Dict, idx:int, total:int, q:Optional[str]) -> str:
+    who=" ".join(x for x in [s.get('contact_name'), s.get('contact_phone')] if x) or "—"
+    lines=[]
+    if q:
+        lines.append(f"🔎 «{q}» — найдено {total}")
+    lines += [
+        f"🏡 <b>{s['address']}</b>",
+        f"👤 {who}",
+        f"📏 {fmt_area(s.get('area_sotki'))} сот. • косили {int(s.get('service_count') or 0)} раз",
+        f"🕒 Последний покос: {fmt_date_display(s.get('last_service_at'))}",
+        "",
+        "🔎 Напиши адрес, имя или телефон — найду.",
+    ]
+    return "\n".join(lines)
+
+def _show_site_slide(chat_id:int, uid:int, idx:int, delete_msg_id:Optional[int]=None):
+    sites=_slider_sites(uid)
+    q=(temp.get(uid) or {}).get('sites_q')
+    if not sites:
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
+        if q:
+            kb.add(types.InlineKeyboardButton("🧹 Сбросить поиск", callback_data="aslide_reset"))
+        kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
+        text=f"По запросу «{q}» ничего не нашёл. Напиши иначе — ищу по адресу, имени и телефону." if q else \
+             "🏡 Участков пока нет — создай первый:"
+        bot.send_message(chat_id, text, reply_markup=kb)
+        return
+    idx=max(0, min(idx, len(sites)-1))
+    s=sites[idx]
+    cap=_site_slide_caption(s, idx, len(sites), q)
+    kb=site_slider_kb(idx, len(sites), s['id'], has_query=bool(q))
+    if delete_msg_id:
+        try: bot.delete_message(chat_id, delete_msg_id)
+        except Exception: pass
+    photo=db.get_site_preview_photo(s['id'])
+    if photo:
+        try:
+            bot.send_photo(chat_id, photo, caption=cap, reply_markup=kb)
+            return
+        except Exception as e:
+            logging.error(f"site slide photo: {e}")
+    bot.send_message(chat_id, cap, reply_markup=kb)
+
 @bot.callback_query_handler(func=lambda c: c.data=='asites')
 def asites(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
-    temp.pop(uid,None)
+    temp[uid]={'flow':'sites_browse'}
     bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
-    sites=db.list_sites_recent(limit=20)
-    text="🏡 Участки (свежие сверху). Открой кнопкой — или напиши часть адреса для поиска:" if sites else \
-         "🏡 Участков пока нет — создай первый:"
-    bot.send_message(call.message.chat.id, text, reply_markup=sites_browse_kb(sites))
+    _show_site_slide(call.message.chat.id, uid, 0)
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('aslide:'))
+def aslide(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id
+    idx=int(call.data.split(':')[1])
+    temp.setdefault(uid,{}).setdefault('flow','sites_browse')
+    bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
+    _show_site_slide(call.message.chat.id, uid, idx, delete_msg_id=call.message.message_id)
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data=='aslide_reset')
+def aslide_reset(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    uid=call.from_user.id
+    temp.setdefault(uid,{}).pop('sites_q', None)
+    bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
+    _show_site_slide(call.message.chat.id, uid, 0, delete_msg_id=call.message.message_id)
     safe_answer(call)
 
 @bot.message_handler(state=AdminSitesStates.search)
 def asites_search(message: types.Message):
     if not require_admin_msg(message): return
+    uid=message.from_user.id
     q=(message.text or '').strip()
-    sites=db.search_sites(q, limit=20)
-    if not sites:
-        kb=types.InlineKeyboardMarkup(row_width=1)
-        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
-        kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
-        bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл:", reply_markup=kb)
+    if not q:
         return
-    bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "asite", back_cb="asites", new_site_cb="anewsite_only"))
+    temp.setdefault(uid,{})['sites_q']=q
+    temp[uid].setdefault('flow','sites_browse')
+    _show_site_slide(message.chat.id, uid, 0)
 
 # ---------------- NEW: зоны из карточки участка ----------------
 
@@ -1585,7 +1648,15 @@ def asite_show(chat_id:int, uid:int, site_id:int):
            last=fmt_date_display(s.get('last_service_at')),
            n=int(s.get('service_count') or 0))
     text += f"\n⏰ Напоминание: раз в {int(s.get('remind_days') or 30)} дн."
-    bot.send_message(chat_id, text, reply_markup=admin_site_actions_kb(site_id, T, lang))
+    kb=admin_site_actions_kb(site_id, T, lang)
+    photo=db.get_site_preview_photo(site_id)
+    if photo and len(text)<=1000:
+        try:
+            bot.send_photo(chat_id, photo, caption=text, reply_markup=kb)
+            return
+        except Exception as e:
+            logging.error(f"site card photo: {e}")
+    bot.send_message(chat_id, text, reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('asite:'))
 def asite(call: types.CallbackQuery):
@@ -1607,25 +1678,46 @@ def asite_orders(call: types.CallbackQuery):
         bot.send_message(call.message.chat.id, "📜 История участка:", reply_markup=admin_orders_list_kb(site_id, orders, T, lang))
     safe_answer(call)
 
+def show_order_card(chat_id:int, uid:int, oid:int):
+    """Карточка заказа одним сообщением: первое фото крупно + текст, остальные фото по кнопке."""
+    lang=get_lang(uid)
+    o=db.get_service_order(oid)
+    if not o:
+        bot.send_message(chat_id, "❌ Заказ не найден.")
+        return
+    site=db.get_site(o['site_id'])
+    text=order_card_text(o, site)
+    photos=db.get_service_order_photos(oid)
+    kb=admin_order_actions_kb(oid, T, lang, extra_photos=max(0, len(photos)-1))
+    if photos and len(text)<=1000:
+        try:
+            bot.send_photo(chat_id, photos[0], caption=text, reply_markup=kb)
+            return
+        except Exception as e:
+            logging.error(f"order card photo: {e}")
+    bot.send_message(chat_id, text, reply_markup=kb)
+
 @bot.callback_query_handler(func=lambda c: c.data.startswith('aorder:'))
 def aorder_open(call: types.CallbackQuery):
     if not require_admin_call(call): return
-    uid=call.from_user.id; lang=get_lang(uid)
+    uid=call.from_user.id
     temp.pop(uid,None); bot.delete_state(uid, call.message.chat.id)
+    show_order_card(call.message.chat.id, uid, int(call.data.split(':')[1]))
+    safe_answer(call)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith('aophotos:'))
+def aophotos(call: types.CallbackQuery):
+    if not require_admin_call(call): return
     oid=int(call.data.split(':')[1])
-    o=db.get_service_order(oid)
-    if not o:
-        bot.send_message(call.message.chat.id, "❌ Заказ не найден.")
-        safe_answer(call); return
-    site=db.get_site(o['site_id'])
-    bot.send_message(call.message.chat.id, order_card_text(o, site), reply_markup=admin_order_actions_kb(oid, T, lang))
-    # send photos (optional)
     photos=db.get_service_order_photos(oid)
-    if photos:
-        try:
-            bot.send_media_group(call.message.chat.id, [types.InputMediaPhoto(fid) for fid in photos[:10]])
-        except Exception as e:
-            logging.error(e)
+    rest=photos[1:11]
+    if not rest:
+        safe_answer(call); return
+    try:
+        bot.send_media_group(call.message.chat.id, [types.InputMediaPhoto(fid) for fid in rest])
+    except Exception as e:
+        logging.error(e)
+        bot.send_message(call.message.chat.id, "❌ Не удалось отправить фото.")
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('adel:'))
@@ -1794,10 +1886,8 @@ def aorder_edit_apply(message: types.Message):
     temp.pop(uid,None); bot.delete_state(uid, message.chat.id)
     bot.send_message(message.chat.id, "✅ Обновлено." if ok else "❌ Не удалось обновить.")
     # show order again
-    o=db.get_service_order(oid)
-    if o:
-        site=db.get_site(o['site_id'])
-        bot.send_message(message.chat.id, order_card_text(o, site), reply_markup=admin_order_actions_kb(oid, T, lang))
+    if db.get_service_order(oid):
+        show_order_card(message.chat.id, uid, oid)
     else:
         show_admin_menu(message.chat.id, uid)
 
