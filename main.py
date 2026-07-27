@@ -1317,8 +1317,6 @@ def _site_slide_caption(s:Dict, idx:int, total:int, q:Optional[str]) -> str:
         f"👤 {who}",
         f"📏 {fmt_area(s.get('area_sotki'))} сот. • косили {int(s.get('service_count') or 0)} раз",
         f"🕒 Последний покос: {fmt_date_display(s.get('last_service_at'))}",
-        "",
-        "🔎 Напиши адрес, имя или телефон — найду.",
     ]
     return "\n".join(lines)
 
