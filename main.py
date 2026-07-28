@@ -187,9 +187,10 @@ def order_money_lines(o: Dict) -> List[str]:
     paid = o.get('paid_amount')
     if paid is not None and round(float(paid), 2) != round(calc, 2):
         diff = float(paid) - calc
-        sign = '+' if diff > 0 else '−'
+        # без минусов: округлил вниз — «скидка», взял больше — «сверху»
+        note = f"скидка {fmt_price(abs(diff))}" if diff < 0 else f"сверху +{fmt_price(diff)}"
         lines = [f"🧮 По расчёту: {fmt_price(calc)} руб",
-                 f"💰 Заплатили: <b>{fmt_price(paid)}</b> руб ({sign}{fmt_price(abs(diff))})"]
+                 f"💰 Заплатили: <b>{fmt_price(paid)}</b> руб ({note})"]
     else:
         lines = [f"💰 Выручка: <b>{fmt_price(m['revenue'])}</b> руб"]
     if m['helper_pay']:
@@ -916,9 +917,16 @@ def a_zones_ok(call: types.CallbackQuery):
 
 def _ask_tariff(uid:int, chat_id:int):
     bot.set_state(uid, AdminOrderStates.tariff, chat_id)
+    ctx=temp.setdefault(uid,{})
+    last, avg = db.site_tariff_stats(int(ctx.get('site_id',0)))
     recent=db.recent_tariffs(limit=6)
-    bot.send_message(chat_id, "💵 Тариф (руб/сотку) — кнопкой или числом:",
-                     reply_markup=tariff_quick_kb(recent))
+    text="💵 Тариф (руб/сотку) — кнопкой или числом:"
+    if last:
+        text+=f"\n📍 Этот участок в прошлый раз: <b>{int(last)}</b>"
+        if avg and round(avg)!=int(last):
+            text+=f" (в среднем {round(avg)})"
+        recent=[int(last)]+[t for t in recent if t!=int(last)]
+    bot.send_message(chat_id, text, reply_markup=tariff_quick_kb(recent[:6]))
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('atrf:'), state=AdminOrderStates.tariff)
 def a_tariff_cb(call: types.CallbackQuery):
@@ -1239,7 +1247,13 @@ def aconfirm_order(call: types.CallbackQuery):
     req_id=data.get('req_id')
     if req_id:
         db.update_request(int(req_id), {'status':'DONE','handled_by_admin_tg_id':uid,'linked_order_id':oid})
-    bot.send_message(call.message.chat.id, T(lang,'order_created', oid=oid))
+    done_kb=types.InlineKeyboardMarkup(row_width=1)
+    done_kb.add(
+        types.InlineKeyboardButton("➕ Ещё заказ", callback_data="aneworder"),
+        types.InlineKeyboardButton("🏡 К участкам", callback_data="asites"),
+        types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"),
+    )
+    bot.send_message(call.message.chat.id, T(lang,'order_created', oid=oid), reply_markup=done_kb)
     # notify client (if known) — только про покосы
     site=db.get_site(site_id)
     if site and site.get('client_tg_id') and not is_other:
@@ -1251,7 +1265,6 @@ def aconfirm_order(call: types.CallbackQuery):
             logging.error(e)
     temp.pop(uid,None)
     bot.delete_state(uid, call.message.chat.id)
-    show_admin_menu(call.message.chat.id, uid)
     safe_answer(call)
 
 # ---------------- NEW: кнопка «⬅️ Назад» в мастере заказа ----------------

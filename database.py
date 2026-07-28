@@ -431,6 +431,21 @@ class Database:
         """, tuple(params+[limit])).fetchall()
         return [dict(r) for r in rows]
 
+    def site_tariff_stats(self, site_id:int) -> Tuple[Optional[int], Optional[float]]:
+        """Последний и средний тариф покосов по участку — чтобы помнить, почём косил."""
+        row=self.conn.execute("""
+            SELECT tariff FROM service_orders
+            WHERE site_id=? AND COALESCE(work_type,'mow')='mow' AND tariff IS NOT NULL
+            ORDER BY service_at DESC, created_at DESC LIMIT 1
+        """, (site_id,)).fetchone()
+        last=int(row['tariff']) if row and row['tariff'] else None
+        row=self.conn.execute("""
+            SELECT AVG(tariff) AS a FROM service_orders
+            WHERE site_id=? AND COALESCE(work_type,'mow')='mow' AND tariff IS NOT NULL
+        """, (site_id,)).fetchone()
+        avg=float(row['a']) if row and row['a'] is not None else None
+        return last, avg
+
     def count_orders_for_site(self, site_id:int) -> int:
         row=self.conn.execute("SELECT COUNT(*) AS c FROM service_orders WHERE site_id=?", (site_id,)).fetchone()
         return int(row['c'] or 0)
