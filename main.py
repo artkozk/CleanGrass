@@ -1705,7 +1705,10 @@ def asite_show(chat_id:int, uid:int, site_id:int, src_msg:Optional[types.Message
            contacts=contacts,
            last=fmt_date_display(s.get('last_service_at')),
            n=int(s.get('service_count') or 0))
-    text += f"\n⏰ Напоминание: раз в {int(s.get('remind_days') or 30)} дн."
+    if s.get('remind_disabled'):
+        text += "\n⏰ Напоминание: отключено навсегда (смена интервала включит снова)"
+    else:
+        text += f"\n⏰ Напоминание: раз в {int(s.get('remind_days') or 30)} дн."
     kb=admin_site_actions_kb(site_id, T, lang)
     photo=db.get_site_preview_photo(site_id)
     if photo and len(text)>1000:
@@ -2003,6 +2006,19 @@ def _remind_site_text(r: Dict) -> str:
             f"🌱 Последний покос: {fmt_date_display(r.get('last_mow'))} — <b>{int(r.get('days_ago') or 0)} дн. назад</b>"
             f" (интервал {int(r.get('remind_days') or 30)} дн.)")
 
+def _send_remind_site_card(chat_id:int, r:Dict):
+    """Отправляет напоминание фотокарточкой; текст — аварийный fallback для старых участков без фото."""
+    text=_remind_site_text(r)
+    kb=remind_actions_kb(r['id'])
+    photo=db.get_site_preview_photo(r['id'])
+    if photo:
+        try:
+            bot.send_photo(chat_id, photo, caption=text, reply_markup=kb)
+            return
+        except Exception as e:
+            logging.error(f"reminder photo card for site {r['id']}: {e}")
+    bot.send_message(chat_id, text, reply_markup=kb)
+
 @bot.callback_query_handler(func=lambda c: c.data=='aremind')
 def aremind(call: types.CallbackQuery):
     if not require_admin_call(call): return
@@ -2012,7 +2028,7 @@ def aremind(call: types.CallbackQuery):
         safe_answer(call); return
     bot.send_message(call.message.chat.id, f"⏰ Пора звонить — {len(due)} участок(ов):")
     for r in due:
-        bot.send_message(call.message.chat.id, _remind_site_text(r), reply_markup=remind_actions_kb(r['id']))
+        _send_remind_site_card(call.message.chat.id, r)
     safe_answer(call)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('armd_call:'))
@@ -2040,6 +2056,15 @@ def armd_days(call: types.CallbackQuery):
     bot.send_message(call.message.chat.id, "⏲ На сколько дней отложить?", reply_markup=prompt_cancel_kb("amenu"))
     safe_answer(call)
 
+@bot.callback_query_handler(func=lambda c: c.data.startswith('armd_forever:'))
+def armd_forever(call: types.CallbackQuery):
+    if not require_admin_call(call): return
+    site_id=int(call.data.split(':')[1])
+    db.disable_site_reminders(site_id)
+    bot.send_message(call.message.chat.id,
+                     "🚫 Напоминания для участка отключены. Чтобы включить их снова, задай интервал в карточке участка.")
+    safe_answer(call)
+
 @bot.message_handler(state=AdminRemindStates.snooze_days)
 def armd_days_apply(message: types.Message):
     if not require_admin_msg(message): return
@@ -2064,7 +2089,7 @@ def send_daily_digest():
         try:
             bot.send_message(aid, f"☀️ Доброе утро! ⏰ Пора звонить — {len(due)} участок(ов):")
             for r in due:
-                bot.send_message(aid, _remind_site_text(r), reply_markup=remind_actions_kb(r['id']))
+                _send_remind_site_card(aid, r)
         except Exception as e:
             logging.error(f"digest to {aid}: {e}")
 

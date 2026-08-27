@@ -477,5 +477,6 @@ def remind_actions_kb(site_id:int) -> InlineKeyboardMarkup:
         InlineKeyboardButton("📞 Позвонил — покос назначен", callback_data=f"armd_call:{site_id}"),
         InlineKeyboardButton("🗓 Отложить на месяц", callback_data=f"armd_month:{site_id}"),
         InlineKeyboardButton("⏲ Отложить на N дней", callback_data=f"armd_days:{site_id}"),
+        InlineKeyboardButton("🚫 Отложить навсегда", callback_data=f"armd_forever:{site_id}"),
     )
     return kb

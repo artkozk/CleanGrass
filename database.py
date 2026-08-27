@@ -165,6 +165,8 @@ class Database:
             'sites': [
                 ("remind_days",         "INTEGER NOT NULL DEFAULT 30"),
                 ("remind_snooze_until", "TEXT"),
+                ("remind_disabled",     "INTEGER NOT NULL DEFAULT 0"),
+                ("hidden_from_browse",  "INTEGER NOT NULL DEFAULT 0"),
             ],
         }
         with self.conn:
@@ -398,7 +400,9 @@ class Database:
 
     def list_sites_recent(self, limit:int=20) -> List[Dict]:
         rows = self.conn.execute("""
-            SELECT * FROM sites ORDER BY COALESCE(last_service_at, created_at) DESC LIMIT ?
+            SELECT * FROM sites
+            WHERE COALESCE(hidden_from_browse, 0)=0
+            ORDER BY COALESCE(last_service_at, created_at) DESC LIMIT ?
         """, (limit,)).fetchall()
         return [dict(r) for r in rows]
 
@@ -426,10 +430,20 @@ class Database:
             clauses.append("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(contact_phone,''),' ',''),'-',''),'(',''),')',''),'+','') LIKE ?")
             params.append(f"%{digits}%")
         rows=self.conn.execute(f"""
-            SELECT * FROM sites WHERE {" OR ".join(clauses)}
+            SELECT * FROM sites
+            WHERE COALESCE(hidden_from_browse, 0)=0
+              AND ({" OR ".join(clauses)})
             ORDER BY COALESCE(last_service_at, created_at) DESC LIMIT ?
         """, tuple(params+[limit])).fetchall()
         return [dict(r) for r in rows]
+
+    def set_site_hidden_from_browse(self, site_id:int, hidden:bool=True) -> bool:
+        """Скрывает служебный участок только из слайдера/поиска, сохраняя историю и статистику."""
+        with self.conn:
+            cur=self.conn.execute(
+                "UPDATE sites SET hidden_from_browse=? WHERE id=?",
+                (1 if hidden else 0, site_id))
+            return cur.rowcount>0
 
     def site_tariff_stats(self, site_id:int) -> Tuple[Optional[int], Optional[float]]:
         """Последний и средний тариф покосов по участку — чтобы помнить, почём косил."""
@@ -696,6 +710,7 @@ class Database:
                   FROM service_orders WHERE work_type != 'other' GROUP BY site_id) lm
               ON lm.site_id = s.id
             WHERE julianday('now') - julianday(lm.last_mow) >= COALESCE(s.remind_days, 30)
+              AND COALESCE(s.remind_disabled, 0)=0
               AND (s.remind_snooze_until IS NULL OR s.remind_snooze_until <= date('now'))
             ORDER BY days_ago DESC LIMIT ?
         """, (limit,)).fetchall()
@@ -707,13 +722,27 @@ class Database:
     def snooze_site(self, site_id:int, days:int) -> bool:
         with self.conn:
             cur=self.conn.execute(
-                "UPDATE sites SET remind_snooze_until = date('now', ?) WHERE id=?",
+                """UPDATE sites
+                   SET remind_snooze_until = date('now', ?), remind_disabled=0
+                   WHERE id=?""",
                 (f'+{int(days)} days', site_id))
+            return cur.rowcount>0
+
+    def disable_site_reminders(self, site_id:int) -> bool:
+        """Отключает регулярные напоминания без магической даты окончания."""
+        with self.conn:
+            cur=self.conn.execute(
+                "UPDATE sites SET remind_disabled=1, remind_snooze_until=NULL WHERE id=?",
+                (site_id,))
             return cur.rowcount>0
 
     def set_remind_days(self, site_id:int, days:int) -> bool:
         with self.conn:
-            cur=self.conn.execute("UPDATE sites SET remind_days=? WHERE id=?", (int(days), site_id))
+            cur=self.conn.execute(
+                """UPDATE sites
+                   SET remind_days=?, remind_disabled=0, remind_snooze_until=NULL
+                   WHERE id=?""",
+                (int(days), site_id))
             return cur.rowcount>0
 
     # ---------------- NEW: meta и бэкап ----------------

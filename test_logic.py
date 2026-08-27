@@ -72,7 +72,7 @@ try:
               'dad_share', 'zones', 'duration_min'):
         check(f'col service_orders.{c}', c in cols, True)
     scols = db._column_names('sites')
-    for c in ('remind_days', 'remind_snooze_until'):
+    for c in ('remind_days', 'remind_snooze_until', 'remind_disabled', 'hidden_from_browse'):
         check(f'col sites.{c}', c in scols, True)
 
     # старые заказы не потерялись и читаются с дефолтами
@@ -128,6 +128,21 @@ try:
     due = db.reminders_due()
     check('reminder_snoozed', any(r['id'] == sid for r in due), False)
 
+    # «навсегда» — отдельный флаг, а не дата в далёком будущем
+    db.disable_site_reminders(sid)
+    s = db.get_site(sid)
+    check('reminder_disabled_flag', s['remind_disabled'], 1)
+    check('reminder_disabled_no_date', s['remind_snooze_until'], None)
+    due = db.reminders_due()
+    check('reminder_disabled', any(r['id'] == sid for r in due), False)
+
+    # явная смена интервала возвращает участок в напоминания
+    db.set_remind_days(sid, 14)
+    s = db.get_site(sid)
+    check('reminder_reenabled', s['remind_disabled'], 0)
+    due = db.reminders_due()
+    check('reminder_due_after_reenable', any(r['id'] == sid for r in due), True)
+
     # новый покос сбрасывает отсрочку
     db.create_service_order(site_id=sid, service_at='2020-07-01', area_sotki=1.0, tariff=500,
                             duration='1ч', notes='', admin_tg_id=1, photo_file_ids=[],
@@ -135,6 +150,13 @@ try:
     s = db.get_site(sid)
     check('snooze_reset', s['remind_snooze_until'], None)
     check('mow_counts', s['service_count'], site_before['service_count'] + 1)
+
+    # служебный участок остаётся в базе и учёте, но пропадает из слайдера и поиска
+    check('site_in_recent_before_hide', any(s['id'] == sid for s in db.list_sites_recent()), True)
+    db.set_site_hidden_from_browse(sid, True)
+    check('site_hidden_recent', any(s['id'] == sid for s in db.list_sites_recent()), False)
+    check('site_hidden_search', any(s['id'] == sid for s in db.search_sites_smart('тестовый')), False)
+    check('site_hidden_still_exists', db.get_site(sid)['id'], sid)
 
     # meta
     db.meta_set('k', 'v1'); db.meta_set('k', 'v2')
@@ -146,6 +168,7 @@ try:
     check('backup_exists', os.path.exists(bpath) and os.path.getsize(bpath) > 0, True)
 
     # ---------- удаление участка целиком ----------
+    db.set_site_hidden_from_browse(sid, False)
     check('site_in_recent', any(s['id'] == sid for s in db.list_sites_recent()), True)
     n_orders = db.count_orders_for_site(sid)
     check('site_orders_counted', n_orders >= 3, True)
