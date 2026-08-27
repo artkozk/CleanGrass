@@ -31,7 +31,7 @@ from keyboards import (
     work_type_kb, zones_kb, tariff_quick_kb, date_quick_kb, duration_quick_kb, paid_quick_kb,
     helper_yn_kb, helper_names_kb, dad_share_kb, skip_kb, step_nav_kb, prompt_cancel_kb,
     stats_period_kb, remind_actions_kb,
-    site_pick_kb, sites_browse_kb, search_results_kb, zones_manage_kb, confirm_action_kb,
+    zones_manage_kb, confirm_action_kb,
     site_slider_kb
 )
 
@@ -602,29 +602,30 @@ def aneworder(call: types.CallbackQuery):
     safe_answer(call)
 
 def _show_site_pick(uid:int, chat_id:int):
+    # выбор участка = тот же фото-слайдер, но с кнопкой «Выбрать» (адреса юзер не помнит, помнит картинку)
+    ctx=temp.setdefault(uid,{})
+    ctx['flow']='admin_order_pick'
+    ctx.pop('sites_q', None); ctx.pop('sites_msg', None)
     bot.set_state(uid, AdminOrderStates.site_search, chat_id)
-    sites=db.list_sites_recent(limit=10)
-    text="Выбери участок кнопкой — или просто напиши часть адреса, я найду:" if sites else \
-         "Участков пока нет — создай первый:"
-    bot.send_message(chat_id, text, reply_markup=site_pick_kb(sites))
+    _show_site_slide(chat_id, uid, 0)
 
 @bot.message_handler(state=AdminOrderStates.site_search)
 def a_site_search(message: types.Message):
     if not require_admin_msg(message): return
     uid=message.from_user.id
     q=(message.text or '').strip()
+    if not q:
+        return
     if q=='-':
         bot.set_state(uid, AdminOrderStates.new_site_address, message.chat.id)
         bot.send_message(message.chat.id, T(get_lang(uid),'admin_new_site_address'))
         return
-    sites=db.search_sites_smart(q, limit=20)
-    if not sites:
-        kb=types.InlineKeyboardMarkup(row_width=1)
-        kb.add(types.InlineKeyboardButton("➕ Создать новый участок", callback_data="aneworder_newsite"))
-        kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
-        bot.send_message(message.chat.id, f"По запросу «{q}» ничего не нашёл (ищу по адресу, имени, телефону). Попробуй иначе — или создай участок:", reply_markup=kb)
-        return
-    bot.send_message(message.chat.id, "Нашёл — выбирай:", reply_markup=search_results_kb(sites, "aneworder_site"))
+    ctx=temp.setdefault(uid,{})
+    ctx['sites_q']=q
+    ctx.setdefault('flow','admin_order_pick')
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except Exception: pass
+    _show_site_slide(message.chat.id, uid, 0)
 
 @bot.callback_query_handler(func=lambda c: c.data=='aneworder_newsite')
 def aneworder_newsite(call: types.CallbackQuery):
@@ -1371,27 +1372,31 @@ def _slider_src(uid:int, call_msg:Optional[types.Message]) -> Tuple[Optional[int
 
 def _show_site_slide(chat_id:int, uid:int, idx:int, src_msg:Optional[types.Message]=None):
     sites=_slider_sites(uid)
-    q=(temp.get(uid) or {}).get('sites_q')
+    ctx=temp.setdefault(uid,{})
+    q=ctx.get('sites_q')
+    pick = ctx.get('flow')=='admin_order_pick'
     mid, has_media=_slider_src(uid, src_msg)
     if not sites:
         kb=types.InlineKeyboardMarkup(row_width=1)
-        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
+        kb.add(types.InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite" if pick else "anewsite_only"))
         if q:
             kb.add(types.InlineKeyboardButton("🧹 Сбросить поиск", callback_data="aslide_reset"))
         kb.add(types.InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
         text=f"По запросу «{q}» ничего не нашёл. Напиши иначе — ищу по адресу, имени и телефону." if q else \
              "🏡 Участков пока нет — создай первый:"
         nmid, nmedia=_edit_or_send(chat_id, mid, has_media, None, text, kb)
-        temp.setdefault(uid,{})['sites_msg']={'mid':nmid,'media':nmedia}
+        ctx['sites_msg']={'mid':nmid,'media':nmedia}
         return
     idx=max(0, min(idx, len(sites)-1))
-    temp.setdefault(uid,{})['sites_idx']=idx
+    ctx['sites_idx']=idx
     s=sites[idx]
     cap=_site_slide_caption(s, idx, len(sites), q)
-    kb=site_slider_kb(idx, len(sites), s['id'], has_query=bool(q))
+    if pick:
+        cap="🌱 Какой участок?\n"+cap
+    kb=site_slider_kb(idx, len(sites), s['id'], has_query=bool(q), pick=pick)
     photo=db.get_site_preview_photo(s['id'])
     nmid, nmedia=_edit_or_send(chat_id, mid, has_media, photo, cap, kb)
-    temp.setdefault(uid,{})['sites_msg']={'mid':nmid,'media':nmedia}
+    ctx['sites_msg']={'mid':nmid,'media':nmedia}
 
 @bot.callback_query_handler(func=lambda c: c.data=='asites')
 def asites(call: types.CallbackQuery):
@@ -1410,8 +1415,10 @@ def aslide(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
     idx=int(call.data.split(':')[1])
-    temp.setdefault(uid,{}).setdefault('flow','sites_browse')
-    bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
+    ctx=temp.setdefault(uid,{})
+    ctx.setdefault('flow','sites_browse')
+    pick = ctx.get('flow')=='admin_order_pick'
+    bot.set_state(uid, AdminOrderStates.site_search if pick else AdminSitesStates.search, call.message.chat.id)
     _show_site_slide(call.message.chat.id, uid, idx, src_msg=call.message)
     safe_answer(call)
 
@@ -1419,8 +1426,11 @@ def aslide(call: types.CallbackQuery):
 def aslide_reset(call: types.CallbackQuery):
     if not require_admin_call(call): return
     uid=call.from_user.id
-    temp.setdefault(uid,{}).pop('sites_q', None)
-    bot.set_state(uid, AdminSitesStates.search, call.message.chat.id)
+    ctx=temp.setdefault(uid,{})
+    ctx.pop('sites_q', None)
+    ctx.setdefault('flow','sites_browse')
+    pick = ctx.get('flow')=='admin_order_pick'
+    bot.set_state(uid, AdminOrderStates.site_search if pick else AdminSitesStates.search, call.message.chat.id)
     _show_site_slide(call.message.chat.id, uid, 0, src_msg=call.message)
     safe_answer(call)
 

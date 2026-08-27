@@ -277,17 +277,21 @@ def admin_order_actions_kb(order_id:int, t, lang, extra_photos:int=0) -> InlineK
     kb.add(InlineKeyboardButton(t(lang,'admin_back_menu'), callback_data="amenu"))
     return kb
 
-def site_slider_kb(idx:int, total:int, site_id:int, has_query:bool=False) -> InlineKeyboardMarkup:
+def site_slider_kb(idx:int, total:int, site_id:int, has_query:bool=False, pick:bool=False) -> InlineKeyboardMarkup:
+    """Слайдер участков. pick=True — режим выбора участка для заказа."""
     kb = InlineKeyboardMarkup(row_width=3)
     kb.add(
         InlineKeyboardButton("⬅️" if idx>0 else "⏹", callback_data=f"aslide:{idx-1}" if idx>0 else "noop"),
         InlineKeyboardButton(f"{idx+1}/{total}", callback_data="noop"),
         InlineKeyboardButton("➡️" if idx<total-1 else "⏹", callback_data=f"aslide:{idx+1}" if idx<total-1 else "noop"),
     )
-    kb.add(InlineKeyboardButton("🧾 Открыть участок", callback_data=f"asite:{site_id}"))
+    if pick:
+        kb.add(InlineKeyboardButton("✅ Выбрать этот участок", callback_data=f"aneworder_site:{site_id}"))
+    else:
+        kb.add(InlineKeyboardButton("🧾 Открыть участок", callback_data=f"asite:{site_id}"))
     if has_query:
         kb.add(InlineKeyboardButton("🧹 Сбросить поиск", callback_data="aslide_reset"))
-    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="anewsite_only"))
+    kb.add(InlineKeyboardButton("➕ Новый участок", callback_data="aneworder_newsite" if pick else "anewsite_only"))
     kb.add(InlineKeyboardButton("↩️ В меню", callback_data="amenu"))
     return kb
 
