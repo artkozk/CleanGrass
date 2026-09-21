@@ -35,7 +35,18 @@ from keyboards import (
     site_slider_kb
 )
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', format='%(asctime)s %(levelname)s %(message)s')
+
+class _SecretRedactingFormatter(logging.Formatter):
+    """Не допускает попадания Telegram-токена в файл журнала и traceback."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        rendered = super().format(record)
+        return rendered.replace(BOT_TOKEN, '{BOT_TOKEN}') if BOT_TOKEN else rendered
+
+
+_log_handler = logging.FileHandler('bot.log', encoding='utf-8')
+_log_handler.setFormatter(_SecretRedactingFormatter('%(asctime)s %(levelname)s %(message)s'))
+logging.basicConfig(level=logging.INFO, handlers=[_log_handler], force=True)
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is empty. Set env BOT_TOKEN in your .env or environment.")
@@ -48,6 +59,10 @@ apihelper.RETRY_ON_ERROR = True
 apihelper.MAX_RETRIES = max(1, int(os.getenv('TELEGRAM_MAX_RETRIES', '5')))
 apihelper.RETRY_TIMEOUT = max(0, int(os.getenv('TELEGRAM_RETRY_TIMEOUT', '2')))
 apihelper.CONNECT_TIMEOUT = max(1, int(os.getenv('TELEGRAM_CONNECT_TIMEOUT', '8')))
+_telegram_proxy = os.getenv('TELEGRAM_PROXY', '').strip()
+if _telegram_proxy:
+    # Явная настройка telebot не затрагивает HTTP-запросы остальных компонентов.
+    apihelper.proxy = {'http': _telegram_proxy, 'https': _telegram_proxy}
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode='HTML')
 bot.add_custom_filter(StateFilter(bot))
