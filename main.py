@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import telebot
-from telebot import types
+from telebot import apihelper, types
 from telebot.custom_filters import StateFilter
 
 from config import DB_NAME, LANG, T, BOT_TOKEN, ADMIN_IDS, ADMIN_PASSWORD, BOT_TZ, DIGEST_HOUR
@@ -39,6 +39,15 @@ logging.basicConfig(level=logging.INFO, filename='bot.log', format='%(asctime)s 
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is empty. Set env BOT_TOKEN in your .env or environment.")
+
+# Маршрут Telegram у некоторых хостингов может кратковременно не принимать новое TCP-
+# соединение. Повторы выполняются внутри общего транспорта telebot, поэтому одинаково
+# защищают polling, ответы на кнопки и отправку фотографий. Значения ограничены, чтобы
+# реальная постоянная авария оставалась видна в журнале и не подвешивала обработчик навсегда.
+apihelper.RETRY_ON_ERROR = True
+apihelper.MAX_RETRIES = max(1, int(os.getenv('TELEGRAM_MAX_RETRIES', '5')))
+apihelper.RETRY_TIMEOUT = max(0, int(os.getenv('TELEGRAM_RETRY_TIMEOUT', '2')))
+apihelper.CONNECT_TIMEOUT = max(1, int(os.getenv('TELEGRAM_CONNECT_TIMEOUT', '8')))
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode='HTML')
 bot.add_custom_filter(StateFilter(bot))
