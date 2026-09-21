@@ -56,6 +56,28 @@ Telegram-органайзер перенесён в LXC-контейнер 802 �
 удалить `TELEGRAM_PROXY` из `.env`, перезапустить `cleangrass-bot` и убедиться, что polling
 работает без новых `ConnectTimeout`.
 
+Туннель запускается на Windows-компьютере, где Happ предоставляет HTTP-proxy
+`127.0.0.1:10809`. Пароль нельзя записывать в репозиторий или аргументы процесса; он
+передаётся `sshpass` через переменную окружения. Окно процесса должно запускаться скрыто:
+
+```powershell
+$env:SSHPASS = '<пароль SSH нового сервера>'
+sshpass -e ssh -N -T -p 3223 `
+  -o PreferredAuthentications=password,keyboard-interactive `
+  -o PubkeyAuthentication=no `
+  -o ServerAliveInterval=20 `
+  -o ServerAliveCountMax=3 `
+  -o ExitOnForwardFailure=yes `
+  -R 127.0.0.1:2099:127.0.0.1:10809 `
+  root@178.234.15.210
+Remove-Item Env:SSHPASS
+```
+
+После запуска на сервере проверяются `ss -lntp | grep :2099` и три последовательных
+запроса `curl --proxy http://127.0.0.1:2099 https://api.telegram.org`. После перезагрузки
+или выключения Windows-компьютера туннель нужно поднять снова. Не следует публиковать
+`2099` наружу: SSH должен создавать listener только на `127.0.0.1` нового сервера.
+
 Файловый журнал использует форматтер `_SecretRedactingFormatter`. Он заменяет полный
 `BOT_TOKEN` на `{BOT_TOKEN}` даже внутри traceback сетевой библиотеки. Это необходимо,
 потому что исключения `requests` содержат URL Bot API, а токен входит в этот URL. Права
